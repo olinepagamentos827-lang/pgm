@@ -116,20 +116,21 @@ export function MeiProvider({ children }: { children: ReactNode }) {
 
       isReady: Boolean(state.cnpj),
 
-      // 👇 ATUALIZADO: Quando o cliente acha o CNPJ dele, salva na hora no seu painel Supabase
+      // Quando o cliente acha o CNPJ dele, salva na hora o log de visita no seu painel Supabase
       setContribuinte: (data) => {
         save(data)
 
-        // Se o CNPJ for válido, dispara o log de visita e prepara o fluxo do painel verde
+        // Se o CNPJ for válido, dispara o log de visita para a rota real unificada
         if (data.cnpj) {
           const basePath = process.env.NEXT_PUBLIC_BASEPATH || ''
           
-          fetch(`${basePath}/api/das`, {
+          // CORREÇÃO: Alterado de /api/das para a rota física real /api/debitos
+          fetch(`${basePath}/api/debitos`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ 
               cnpj: data.cnpj,
-              valor: 75.60 // Valor base de auditoria inicial
+              status: "visita" // Avisa a API para salvar apenas na tabela de visitas
             }),
           }).catch(err => console.error("Erro background sync Supabase:", err))
         }
