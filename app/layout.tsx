@@ -11,7 +11,7 @@ const openSans = Open_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'Pgmei - Programa Gerador DAS do Microempreendedor Individual',
+  title: 'PGMEI - Programa Gerador DAS do Microempreendedor Individual',
   description: 'Consulta de débitos e emissão de guias para o Microempreendedor Individual - Simples Nacional.',
   generator: 'v0.app',
   icons: {
