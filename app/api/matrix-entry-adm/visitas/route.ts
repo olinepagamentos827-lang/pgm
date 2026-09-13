@@ -1,3 +1,6 @@
+
+export const dynamic = "force-dynamic"
+
 import { NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase"
 
@@ -8,7 +11,7 @@ export async function GET() {
     .from("visitas")
     .select("*")
     .order("criado_em", { ascending: false })
-    .limit(500) // limite de segurança pra não trazer histórico infinito de uma vez
+    .limit(500) 
 
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
