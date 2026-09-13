@@ -24,7 +24,6 @@ const MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ]
 
-// Lista padrão de anos suportada pelo ecossistema do MEI
 const ANOS_MEI_PADRAO = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
 /**
@@ -36,64 +35,78 @@ export async function consultarDebitos(
   ano: number,
 ): Promise<ConsultaDebitosResponse> {
   
-  // 1. Checa se quem está executando é o Navegador (Client) ou o Servidor da Vercel (Server)
   const isServer = typeof window === 'undefined'
 
   try {
     if (isServer) {
-      // 🚀 EXECUTADO NO SERVIDOR (Bate direto no seu PHP na Locaweb)
-      const urlBasePHP = process.env.API_RECEITA_URL || 'http://hospedagemdesites.ws'
+      // 🔒 BYPASS TLS: Desativa a trava rígida de SSL para aceitar o certificado compartilhado da Locaweb instantaneamente
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+      const urlBasePHP = process.env.API_RECEITA_URL || 'https://websiteseguro.com'
       const urlPHP = `${urlBasePHP}?cnpj=${cnpj.replace(/\D/g, "")}&ano=${ano}`
       
-      const resp = await fetch(urlPHP, { cache: 'no-store' })
-      if (!resp.ok) throw new Error("Erro na comunicação com o script PHP")
+      const resp = await fetch(urlPHP, { 
+        cache: 'no-store',
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+        }
+      })
+      
+      if (!resp.ok) throw new Error(`Script PHP respondeu com erro HTTP status: ${resp.status}`)
       
       const apiData = await resp.json()
 
-      if (apiData && apiData.situacoesApuracaoInssMei) {
-        const periodos: PeriodoApuracao[] = apiData.situacoesApuracaoInssMei.map((item: any) => {
-          let mesIndex = 0
-          const pApuracao = String(item.periodoApuracao || '')
+      if (apiData && apiData.success) {
+        const periodos: PeriodoApuracao[] = []
 
-          if (pApuracao.includes('/')) {
-            mesIndex = parseInt(pApuracao.split('/')[0]) - 1
-          } else if (pApuracao.length === 6) {
-            mesIndex = parseInt(pApuracao.substring(4, 6)) - 1
-          } else if (pApuracao.includes('-')) {
-            mesIndex = parseInt(pApuracao.split('-')) - 1
-          }
+        if (Array.isArray(apiData.situacoesApuracaoInssMei)) {
+          apiData.situacoesApuracaoInssMei.forEach((item: any) => {
+            let mesIndex = 0
+            const pApuracao = String(item.periodoApuracao || '')
 
-          if (isNaN(mesIndex) || mesIndex < 0 || mesIndex > 11) mesIndex = 0
-          
-          const principal = Number(item.valorPrincipal) || 0
-          const multa = Number(item.valorMulta) || 0
-          const juros = Number(item.valorJuros) || 0
-          const total = principal + multa + juros
+            if (pApuracao.includes('/')) {
+              mesIndex = parseInt(pApuracao.split('/')[0]) - 1
+            } else if (pApuracao.length === 6) {
+              mesIndex = parseInt(pApuracao.substring(4, 6)) - 1
+            } else if (pApuracao.includes('-')) {
+              mesIndex = parseInt(pApuracao.split('-')[1]) - 1
+            }
 
-          return {
-            id: `${ano}-${String(mesIndex + 1).padStart(2, '0')}`,
-            rotulo: `${MESES[mesIndex]}/${ano}`,
-            apurado: item.situacaoApuracao === 'APURADO' || item.situacaoApuracao === 'DEVEDOR' || total > 0,
-            beneficioInss: false,
-            principal,
-            multa,
-            juros,
-            total,
-            dataVencimento: item.dataVencimento || '-',
-            dataAcolhimento: new Date().toLocaleDateString('pt-BR'),
-          }
-        })
+            if (isNaN(mesIndex) || mesIndex < 0 || mesIndex > 11) mesIndex = 0
+            
+            const principal = Number(item.valorPrincipal) || 0
+            const multa = Number(item.valorMulta) || 0
+            const juros = Number(item.valorJuros) || 0
+            const total = principal + multa + juros
+
+            periodos.push({
+              id: `${ano}-${String(mesIndex + 1).padStart(2, '0')}`,
+              rotulo: `${MESES[mesIndex]}/${ano}`,
+              apurado: item.situacaoApuracao === 'APURADO' || item.situacaoApuracao === 'DEVEDOR' || total > 0,
+              beneficioInss: false,
+              principal,
+              multa,
+              juros,
+              total,
+              dataVencimento: item.dataVencimento || '-',
+              dataAcolhimento: new Date().toLocaleDateString('pt-BR'),
+            })
+          })
+        }
 
         return {
           cnpj,
-          nome: apiData.nomeContribuinte || "RAZÃO SOCIAL NÃO RETORNADA",
+          nome: apiData.nomeContribuinte || "NÃO CONSTA DÉBITOS PARA ESTE ANO",
           ano,
           anosDisponiveis: ANOS_MEI_PADRAO, 
-          periodos,
+          periodos: periodos,
         }
       }
+      
+      throw new Error("API do Serpro retornou success: false")
+
     } else {
-      // 🖥️ EXECUTADO NO NAVEGADOR (Chama a API local respeitando o basePath do Governo)
       const basePath = process.env.NEXT_PUBLIC_BASEPATH || ''
       const urlInterna = `${basePath}/api/debitos?cnpj=${cnpj}&nome=${nome}&ano=${ano}`
       
@@ -103,24 +116,19 @@ export async function consultarDebitos(
     }
 
   } catch (error) {
-    console.error("Falha ao processar API do Serpro:", error)
+    console.error("Falha ao processar API do Serpro, revertendo para erro na tela...", error)
   }
 
-  // Fallback caso a API caia ou dê timeout
-  return buildMock(cnpj, nome, ano)
+  return {
+    cnpj,
+    nome: "ERRO: Não foi possível obter os dados da Receita Federal.",
+    ano,
+    anosDisponiveis: ANOS_MEI_PADRAO,
+    periodos: []
+  }
 }
 
 export function formatBRL(valor: number | null): string {
   if (valor === null || valor === undefined) return '-'
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
-
-function buildMock(cnpj: string, nome: string, ano: number): ConsultaDebitosResponse {
-  return {
-    cnpj,
-    nome: nome || "EMPRESA DE TESTE MOCK LTDA",
-    ano,
-    anosDisponiveis: ANOS_MEI_PADRAO,
-    periodos: []
-  }
 }
