@@ -12,9 +12,11 @@ const openSans = Open_Sans({
 
 export const metadata: Metadata = {
   title: 'Pgmei - Programa Gerador DAS do Microempreendedor Individual',
-  description:
-    'Consulta de débitos e emissão de guias para o Microempreendedor Individual - Simples Nacional.',
+  description: 'Consulta de débitos e emissão de guias para o Microempreendedor Individual - Simples Nacional.',
   generator: 'v0.app',
+  icons: {
+    icon: '/images/favicon.ico',
+  },
 }
 
 export const viewport: Viewport = {
@@ -33,7 +35,7 @@ export default function RootLayout({
         <MeiProvider>
           {children}
         </MeiProvider>
-
+        
         {process.env.NODE_ENV === 'production' && (
           <Analytics />
         )}
