@@ -25,7 +25,7 @@ const MESES = [
 ]
 
 /**
- * Consulta os débitos de um CNPJ consumindo o script real do Serpro/RFB na Locaweb
+ * Consulta os débitos de um CNPJ consumindo o seu script PHP real do Serpro na Locaweb
  */
 export async function consultarDebitos(
   cnpj: string,
@@ -33,42 +33,44 @@ export async function consultarDebitos(
   ano: number,
 ): Promise<ConsultaDebitosResponse> {
   try {
-    // 1. 🚀 CHAMADA DIRETA PARA O SCRIPT PHP DA RECEITA (Hospedado na Locaweb)
-    // Lê a variável de ambiente configurada na Vercel
-    const urlPHP = `${process.env.API_RECEITA_URL || ''}?cnpj=${cnpj}&ano=${ano}`
+    // 1. URL da API apontando para o seu PHP hospedado na Locaweb
+    const urlBasePHP = process.env.API_RECEITA_URL || 'http://hospedagemdesites.ws'
+    const urlPHP = `${urlBasePHP}?cnpj=${cnpj}&ano=${ano}`
     
-    const resp = await fetch(urlPHP, { cache: 'no-store' });
+    const resp = await fetch(urlPHP, { cache: 'no-store' })
     if (!resp.ok) throw new Error("Erro na comunicação com o script PHP")
+    
     const apiData = await resp.json()
 
-    // 2. 🗺️ MAPEAMENTO: Transforma a resposta real do Serpro no formato do layout
-    if (apiData && apiData.success && apiData.situacoesApuracaoInssMei) {
+    // 2. Transforma a resposta crua do Serpro no formato exato que a sua tela espera
+    if (apiData && apiData.situacoesApuracaoInssMei) {
       
       const periodos: PeriodoApuracao[] = apiData.situacoesApuracaoInssMei.map((item: any) => {
-        let mesIndex = 0;
-        const pApuracao = String(item.periodoApuracao || '');
+        let mesIndex = 0
+        const pApuracao = String(item.periodoApuracao || '')
 
+        // Mapeia o mês retornado pela receita (ex: "03/2023" ou "202303")
         if (pApuracao.includes('/')) {
-          mesIndex = parseInt(pApuracao.split('/')[0]) - 1;
-        } else if (pApuracao.includes('-')) {
-          mesIndex = parseInt(pApuracao.split('-')[1]) - 1;
+          mesIndex = parseInt(pApuracao.split('/')[0]) - 1
         } else if (pApuracao.length === 6) {
-          mesIndex = parseInt(pApuracao.substring(4, 6)) - 1;
+          mesIndex = parseInt(pApuracao.substring(4, 6)) - 1
+        } else if (pApuracao.includes('-')) {
+          mesIndex = parseInt(pApuracao.split('-')[1]) - 1
         }
 
-        if (isNaN(mesIndex) || mesIndex < 0 || mesIndex > 11) {
-          mesIndex = 0;
-        }
+        if (isNaN(mesIndex) || mesIndex < 0 || mesIndex > 11) mesIndex = 0
         
-        const principal = item.valorPrincipal || 0
-        const multa = item.valorMulta || 0
-        const juros = item.valorJuros || 0
+        // Trata os valores vindos do Serpro
+        const principal = Number(item.valorPrincipal) || 0
+        const multa = Number(item.valorMulta) || 0
+        const juros = Number(item.valorJuros) || 0
         const total = principal + multa + juros
 
         return {
           id: `${ano}-${String(mesIndex + 1).padStart(2, '0')}`,
           rotulo: `${MESES[mesIndex]}/${ano}`,
-          apurado: item.situacaoApuracao === 'APURADO' || item.situacaoApuracao === 'DEVEDOR',
+          // Se estiver devedor ou apurado vira uma linha clicável de débito para gerar Pix
+          apurado: item.situacaoApuracao === 'APURADO' || item.situacaoApuracao === 'DEVEDOR' || total > 0,
           beneficioInss: false,
           principal,
           multa,
@@ -79,42 +81,35 @@ export async function consultarDebitos(
         }
       })
 
-      const listaAnos = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
-
+      // Retorna a Razão Social Real, os Anos com débito e os Meses estruturados
       return {
         cnpj,
-        nome: apiData.nomeContribuinte || nome || "CONTRIBUINTE MEI ATIVO",
+        nome: apiData.nomeContribuinte || "RAZÃO SOCIAL NÃO RETORNADA",
         ano,
-        anosDisponiveis: listaAnos, 
+        anosDisponiveis:, 
         periodos,
       }
     }
 
   } catch (error) {
-    console.error("Falha ao buscar dados reais do Serpro, revertendo para mock visual...", error)
+    console.error("Falha ao processar API do Serpro:", error)
   }
 
-  // Fallback seguro caso a Locaweb caia ou apresente problemas
+  // Fallback caso a API caia ou dê timeout
   return buildMock(cnpj, nome, ano)
 }
 
-/** Formata número para moeda BRL (ex.: 112.79 -> "R$ 112,79"). */
 export function formatBRL(valor: number | null): string {
   if (valor === null || valor === undefined) return '-'
-  return valor.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  })
+  return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-/** Função Fallback auxiliar de Mock */
 function buildMock(cnpj: string, nome: string, ano: number): ConsultaDebitosResponse {
-  const listaAnosMock = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
   return {
     cnpj,
-    nome: nome || "MOCK CONTRIBUINTE LTDA",
+    nome: nome || "EMPRESA DE TESTE MOCK LTDA",
     ano,
-    anosDisponiveis: listaAnosMock,
+    anosDisponiveis:,
     periodos: []
   }
 }
