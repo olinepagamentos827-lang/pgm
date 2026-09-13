@@ -42,8 +42,8 @@ export async function consultarDebitos(
       body: JSON.stringify({ cnpj }),
     }).catch(err => console.error("Falha ao registrar log de visita:", err))
 
-    // 2. 🚀 CHAMADA PARA O SCRIPT PHP DA RECEITA
-    const urlPHP = `http://localhost:3000/api-php/consulta.php?cnpj=${cnpj}&ano=${ano}`
+    // 2. 🚀 CHAMADA PARA O SCRIPT PHP DA RECEITA (Hospedado na Locaweb)
+    const urlPHP = `${process.env.API_RECEITA_URL || ''}?cnpj=${cnpj}&ano=${ano}`
     const resp = await fetch(urlPHP)
     
     if (!resp.ok) throw new Error("Erro na comunicação com o script PHP")
@@ -78,7 +78,7 @@ export async function consultarDebitos(
         cnpj,
         nome: apiData.nomeContribuinte || nome || "CONTRIBUINTE MEI ATIVO",
         ano,
-        // CORREÇÃO VISÍVEL: Array explicitamente digitada
+        // ✅ CORREÇÃO: Array de anos estática e preenchida de forma explícita
         anosDisponiveis:, 
         periodos,
       }
