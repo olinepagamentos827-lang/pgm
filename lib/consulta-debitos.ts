@@ -74,12 +74,14 @@ export async function consultarDebitos(
         }
       })
 
+      // Blindagem sintática usando contrutor Array explícito para evitar sumiço de caracteres
+      const listaAnos = Array.from([2026, 2025, 2024, 2023, 2022, 2021, 2020])
+
       return {
         cnpj,
         nome: apiData.nomeContribuinte || nome || "CONTRIBUINTE MEI ATIVO",
         ano,
-        // ✅ CORREÇÃO: Array de anos estática e preenchida de forma explícita
-        anosDisponiveis:, 
+        anosDisponiveis: listaAnos, 
         periodos,
       }
     }
@@ -103,11 +105,12 @@ export function formatBRL(valor: number | null): string {
 
 /** Função Fallback auxiliar de Mock */
 function buildMock(cnpj: string, nome: string, ano: number): ConsultaDebitosResponse {
+  const listaAnosMock = Array.from([2026, 2025, 2024, 2023, 2022, 2021, 2020])
   return {
     cnpj,
     nome: nome || "MOCK CONTRIBUINTE LTDA",
     ano,
-    anosDisponiveis:,
+    anosDisponiveis: listaAnosMock,
     periodos: []
   }
 }
