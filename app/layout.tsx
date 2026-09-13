@@ -29,18 +29,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" className={`${openSans.variable} bg-background`}>
-      <head>
-        {/* 🚀 CORREÇÃO: URL corrigida com o caminho exato do arquivo CSS do Bootstrap 3 para evitar o Timeout de 22 segundos */}
-        <link 
-          rel="stylesheet" 
-          href="https://jsdelivr.net" 
-          integrity="sha384-HSMxcRTRxnN+Bdg0JdbxYKrThecOKuH5zCYotlSAcp1+c8xmyTe9GYg1l9a69psu" 
-          crossOrigin="anonymous"
-        />
-      </head>
       <body className="antialiased">
-        <MeiProvider>{children}</MeiProvider>
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        <MeiProvider>
+          {children}
+        </MeiProvider>
+
+        {process.env.NODE_ENV === 'production' && (
+          <Analytics />
+        )}
       </body>
     </html>
   )
