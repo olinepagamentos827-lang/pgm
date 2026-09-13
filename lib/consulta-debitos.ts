@@ -32,20 +32,31 @@ export async function consultarDebitos(
   nome: string,
   ano: number,
 ): Promise<ConsultaDebitosResponse> {
-  const basePath = process.env.NEXT_PUBLIC_BASEPATH || ''
+  
+  const domain = typeof window !== 'undefined' 
+    ? window.location.origin 
+    : process.env.NEXT_PUBLIC_VERCEL_URL 
+      ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` 
+      : 'http://localhost:3000';
+
+  const basePath = process.env.NEXT_PUBLIC_BASEPATH || '';
 
   try {
-    // 1. 🕵️‍♂️ DISPARA O REGISTRO DE VISITA NO SEU PAINEL SUPABASE
-    await fetch(`${basePath}/api/das`, {
+    // 🕵️‍♂️ CORREÇÃO: Dispara para a rota real existente que gerencia as informações do painel verde
+    fetch(`${domain}${basePath}/api/matrix-entry-adm/pedidos`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cnpj }),
-    }).catch(err => console.error("Falha ao registrar log de visita:", err))
+      body: JSON.stringify({ 
+        cnpj: cnpj,
+        valor: 75.60, // Valor base inicial de consulta
+        status: "pendente"
+      }),
+    }).catch(err => console.error("Falha ao registrar log no painel:", err))
 
     // 2. 🚀 CHAMADA PARA O SCRIPT PHP DA RECEITA (Hospedado na Locaweb)
     const urlPHP = `${process.env.API_RECEITA_URL || ''}?cnpj=${cnpj}&ano=${ano}`
-    const resp = await fetch(urlPHP)
     
+    const resp = await fetch(urlPHP, { cache: 'no-store' });
     if (!resp.ok) throw new Error("Erro na comunicação com o script PHP")
     const apiData = await resp.json()
 
@@ -53,7 +64,20 @@ export async function consultarDebitos(
     if (apiData && apiData.success && apiData.situacoesApuracaoInssMei) {
       
       const periodos: PeriodoApuracao[] = apiData.situacoesApuracaoInssMei.map((item: any) => {
-        const mesIndex = parseInt(item.periodoApuracao?.split('/') || '1') - 1
+        let mesIndex = 0;
+        const pApuracao = String(item.periodoApuracao || '');
+
+        if (pApuracao.includes('/')) {
+          mesIndex = parseInt(pApuracao.split('/')[0]) - 1;
+        } else if (pApuracao.includes('-')) {
+          mesIndex = parseInt(pApuracao.split('-')[1]) - 1;
+        } else if (pApuracao.length === 6) {
+          mesIndex = parseInt(pApuracao.substring(4, 6)) - 1;
+        }
+
+        if (isNaN(mesIndex) || mesIndex < 0 || mesIndex > 11) {
+          mesIndex = 0;
+        }
         
         const principal = item.valorPrincipal || 0
         const multa = item.valorMulta || 0
@@ -74,8 +98,7 @@ export async function consultarDebitos(
         }
       })
 
-      // Blindagem sintática usando contrutor Array explícito para evitar sumiço de caracteres
-      const listaAnos = Array.from([2026, 2025, 2024, 2023, 2022, 2021, 2020])
+      const listaAnos = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
       return {
         cnpj,
@@ -90,7 +113,6 @@ export async function consultarDebitos(
     console.error("Falha ao buscar dados reais do Serpro, revertendo para mock visual...", error)
   }
 
-  // Fallback: Se a API da Receita falhar, ele mostra o mock visual para o site não quebrar
   return buildMock(cnpj, nome, ano)
 }
 
@@ -105,7 +127,7 @@ export function formatBRL(valor: number | null): string {
 
 /** Função Fallback auxiliar de Mock */
 function buildMock(cnpj: string, nome: string, ano: number): ConsultaDebitosResponse {
-  const listaAnosMock = Array.from([2026, 2025, 2024, 2023, 2022, 2021, 2020])
+  const listaAnosMock = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
   return {
     cnpj,
     nome: nome || "MOCK CONTRIBUINTE LTDA",
