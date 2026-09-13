@@ -1,14 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Caminho oficial injetado após o domínio (Governo)
+  // 🏛️ Caminho oficial injetado após o domínio (Governo)
   basePath: '/SimplesNacional/Aplicacoes/ATSPO/pgmei.app',
-  
-  // Garante o carregamento do CSS/JS do Tailwind
-  assetPrefix: '/SimplesNacional/Aplicacoes/ATSPO/pgmei.app',
 
-  // Expõe o basePath com segurança para o Navegador
+  // 🌍 Expõe as variáveis com segurança tanto para o Servidor quanto para o Navegador
   env: {
     NEXT_PUBLIC_BASEPATH: '/SimplesNacional/Aplicacoes/ATSPO/pgmei.app',
+    API_RECEITA_URL: process.env.API_RECEITA_URL,
   },
 
   typescript: {
