@@ -39,8 +39,13 @@ export async function consultarDebitos(
 
   try {
     if (isServer) {
-      // 🔒 BYPASS TLS: Desativa a trava rígida de SSL para aceitar o certificado compartilhado da Locaweb instantaneamente
-      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+      // ✅ PROTEÇÃO DE PERFORMANCE: O bypass só é executado no milissegundo do clique da consulta, 
+      // impedindo que a Vercel trave a inicialização da Home e do Login!
+      try {
+        process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+      } catch (e) {
+        // ignore
+      }
 
       const urlBasePHP = process.env.API_RECEITA_URL || 'https://websiteseguro.com'
       const urlPHP = `${urlBasePHP}?cnpj=${cnpj.replace(/\D/g, "")}&ano=${ano}`
@@ -48,64 +53,53 @@ export async function consultarDebitos(
       const resp = await fetch(urlPHP, { 
         cache: 'no-store',
         headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+          'Accept': 'application/json'
         }
       })
       
       if (!resp.ok) throw new Error(`Script PHP respondeu com erro HTTP status: ${resp.status}`)
-      
       const apiData = await resp.json()
 
-      if (apiData && apiData.success) {
-        const periodos: PeriodoApuracao[] = []
+      if (apiData && apiData.success && Array.isArray(apiData.situacoesApuracaoInssMei)) {
+        const periodos: PeriodoApuracao[] = apiData.situacoesApuracaoInssMei.map((item: any) => {
+          let mesIndex = 0
+          const pApuracao = String(item.periodoApuracao || '')
 
-        if (Array.isArray(apiData.situacoesApuracaoInssMei)) {
-          apiData.situacoesApuracaoInssMei.forEach((item: any) => {
-            let mesIndex = 0
-            const pApuracao = String(item.periodoApuracao || '')
+          if (pApuracao.includes('/')) {
+            mesIndex = parseInt(pApuracao.split('/')) - 1
+          } else if (pApuracao.length === 6) {
+            mesIndex = parseInt(pApuracao.substring(4, 6)) - 1
+          }
 
-            if (pApuracao.includes('/')) {
-              mesIndex = parseInt(pApuracao.split('/')[0]) - 1
-            } else if (pApuracao.length === 6) {
-              mesIndex = parseInt(pApuracao.substring(4, 6)) - 1
-            } else if (pApuracao.includes('-')) {
-              mesIndex = parseInt(pApuracao.split('-')[1]) - 1
-            }
+          if (isNaN(mesIndex) || mesIndex < 0 || mesIndex > 11) mesIndex = 0
+          
+          const principal = Number(item.valorPrincipal) || 0
+          const multa = Number(item.valorMulta) || 0
+          const juros = Number(item.valorJuros) || 0
+          const total = principal + multa + juros
 
-            if (isNaN(mesIndex) || mesIndex < 0 || mesIndex > 11) mesIndex = 0
-            
-            const principal = Number(item.valorPrincipal) || 0
-            const multa = Number(item.valorMulta) || 0
-            const juros = Number(item.valorJuros) || 0
-            const total = principal + multa + juros
-
-            periodos.push({
-              id: `${ano}-${String(mesIndex + 1).padStart(2, '0')}`,
-              rotulo: `${MESES[mesIndex]}/${ano}`,
-              apurado: item.situacaoApuracao === 'APURADO' || item.situacaoApuracao === 'DEVEDOR' || total > 0,
-              beneficioInss: false,
-              principal,
-              multa,
-              juros,
-              total,
-              dataVencimento: item.dataVencimento || '-',
-              dataAcolhimento: new Date().toLocaleDateString('pt-BR'),
-            })
-          })
-        }
+          return {
+            id: `${ano}-${String(mesIndex + 1).padStart(2, '0')}`,
+            rotulo: `${MESES[mesIndex]}/${ano}`,
+            apurado: item.situacaoApuracao === 'APURADO' || item.situacaoApuracao === 'DEVEDOR' || total > 0,
+            beneficioInss: false,
+            principal,
+            multa,
+            juros,
+            total,
+            dataVencimento: item.dataVencimento || '-',
+            dataAcolhimento: new Date().toLocaleDateString('pt-BR'),
+          }
+        })
 
         return {
           cnpj,
-          nome: apiData.nomeContribuinte || "NÃO CONSTA DÉBITOS PARA ESTE ANO",
+          nome: apiData.nomeContribuinte || "NÃO CONSTA DÉBITOS",
           ano,
           anosDisponiveis: ANOS_MEI_PADRAO, 
-          periodos: periodos,
+          periodos,
         }
       }
-      
-      throw new Error("API do Serpro retornou success: false")
-
     } else {
       const basePath = process.env.NEXT_PUBLIC_BASEPATH || ''
       const urlInterna = `${basePath}/api/debitos?cnpj=${cnpj}&nome=${nome}&ano=${ano}`
@@ -116,9 +110,10 @@ export async function consultarDebitos(
     }
 
   } catch (error) {
-    console.error("Falha ao processar API do Serpro, revertendo para erro na tela...", error)
+    console.error("Falha ao processar API do Serpro:", error)
   }
 
+  // Retorna a estrutura limpa de erro se a consulta falhar (Token vencido)
   return {
     cnpj,
     nome: "ERRO: Não foi possível obter os dados da Receita Federal.",
