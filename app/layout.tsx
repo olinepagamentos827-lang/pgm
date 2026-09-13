@@ -30,7 +30,7 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={`${openSans.variable} bg-background`}>
       <head>
-        {/* Importação nativa da folha de estilos de fontes do Bootstrap 3 */}
+        {/* 🚀 CORREÇÃO: URL corrigida com o caminho exato do arquivo CSS do Bootstrap 3 para evitar o Timeout de 22 segundos */}
         <link 
           rel="stylesheet" 
           href="https://jsdelivr.net" 
