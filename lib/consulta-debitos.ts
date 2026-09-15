@@ -17,7 +17,7 @@ export interface ConsultaDebitosResponse {
   cnpj: string
   nome: string
   ano: number
-  anosDisponiveis: number[]
+  anosDisponiveis: { ano: number; naoOptante: boolean }[]
   periodos: PeriodoApuracao[]
   error?: string
 }
@@ -27,17 +27,21 @@ const MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ]
 
-const ANOS_MEI_PADRAO = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
+const ANOS_MEI_PADRAO = [
+  { ano: 2026, naoOptante: false },
+  { ano: 2025, naoOptante: false },
+  { ano: 2024, naoOptante: false },
+  { ano: 2023, naoOptante: false },
+  { ano: 2022, naoOptante: false },
+  { ano: 2021, naoOptante: false },
+  { ano: 2020, naoOptante: false }
+]
 
-/**
- * Consulta os débitos de um CNPJ consumindo o seu script PHP real do Serpro na Locaweb
- */
 export async function consultarDebitos(
   cnpj: string,
   nome: string,
   ano: number,
 ): Promise<ConsultaDebitosResponse> {
-  
   const isServer = typeof window === 'undefined'
 
   try {
@@ -67,25 +71,67 @@ export async function consultarDebitos(
       const apiData = await resp.json()
       console.log("[DEBUG] Payload cru recebido do PHP:", JSON.stringify(apiData));
 
-      // 1. TRATAMENTO INTELIGENTE PARA CNPJ BAIXADO:
-      // Se a resposta contiver erro, mas o erro for especificamente que o contribuinte está BAIXADO,
-      // nós PERMITIMOS a entrada retornando uma estrutura limpa (com os períodos vazios apenas para este ano da baixa).
       if (apiData && apiData['mensagem-erro']) {
         const textoErro = String(apiData['mensagem-erro'].texto || '');
         const codigoErro = String(apiData['mensagem-erro'].codigo || '');
         
         if (textoErro.toLowerCase().includes('baixado') || codigoErro === '23033') {
-          console.log("[DEBUG] CNPJ válido porém baixado. Permitindo acesso para consulta de anos anteriores.");
+          console.log("[DEBUG] CNPJ válido porém baixado. Buscando nome real no ano anterior...");
+          let nomeResgatado = apiData.nomeContribuinte || nome || "";
+
+          if (!nomeResgatado || nomeResgatado === "MICROEMPREENDEDOR INDIVIDUAL") {
+            try {
+              const anoAnterior = ano - 1;
+              const urlFallbackName = `${urlCompleta}?cnpj=${cnpj.replace(/\D/g, "")}&ano=${anoAnterior}`;
+              const respName = await fetch(urlFallbackName, {
+                cache: 'no-store',
+                headers: {
+                  'Accept': 'application/json',
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+                }
+              });
+              if (respName.ok) {
+                const dataName = await respName.json();
+                if (dataName && dataName.nomeContribuinte) {
+                  nomeResgatado = dataName.nomeContribuinte;
+                  console.log("[DEBUG] Nome real resgatado com sucesso:", nomeResgatado);
+                }
+              }
+            } catch (errName) {
+              console.error("Erro ao resgatar nome:", errName);
+            }
+          }
+
+          if (!nomeResgatado) nomeResgatado = "MICROEMPREENDEDOR INDIVIDUAL";
+
+          const listaAnosCustom = ANOS_MEI_PADRAO.map(item => ({
+            ano: item.ano,
+            naoOptante: item.ano === ano ? true : false
+          }));
+
           return {
             cnpj,
-            nome: apiData.nomeContribuinte || nome || "MICROEMPREENDEDOR INDIVIDUAL (BAIXADO)",
+            nome: nomeResgatado,
             ano,
-            anosDisponiveis: ANOS_MEI_PADRAO,
-            periodos: [], // Deixa a tabela vazia para 2026, mas permite que o usuário mude o ano lá dentro!
+            anosDisponiveis: listaAnosCustom,
+            periodos: [],
           }
         }
 
-        // Se for QUALQUER OUTRO ERRO da receita (ex: CNPJ falso/inexistente), aí sim nós barramos
+        if (textoErro.toLowerCase().includes('não optante') || codigoErro === '23010') {
+          const listaAnosCustom = ANOS_MEI_PADRAO.map(item => ({
+            ano: item.ano,
+            naoOptante: item.ano === ano ? true : false
+          }));
+          return {
+            cnpj,
+            nome: apiData.nomeContribuinte || nome || "MICROEMPREENDEDOR INDIVIDUAL",
+            ano,
+            anosDisponiveis: listaAnosCustom,
+            periodos: []
+          }
+        }
+
         return {
           cnpj,
           nome: "CNPJ APRESENTA RESTRICAO",
@@ -111,7 +157,6 @@ export async function consultarDebitos(
                              apiData.situacoesApuracaoInssMei || 
                              apiData.situacaoApuracaoInssMei;
 
-      // 2. Fluxo normal para quando o ano consultado retornar os meses com sucesso
       if (apiData && apiData.success && Array.isArray(listaApuracoes)) {
         const periodos: PeriodoApuracao[] = listaApuracoes.map((item: any) => {
           let mesIndex = 0
@@ -154,16 +199,14 @@ export async function consultarDebitos(
       }
     } else {
       const basePath = process.env.NEXT_PUBLIC_BASEPATH || ''
-      const urlInterna = `${basePath}/api/debitos?cnpj=${cnpj}&nome=${nome}&ano=${ano}`
-      
+      const urlInterna = `${basePath}/api/debitos?cnpj=${cnpj}&ano=${ano}`
       const resp = await fetch(urlInterna, { cache: 'no-store' })
       if (!resp.ok) throw new Error("Erro na rota interna de débitos")
       return await resp.json()
     }
-
   } catch (error: any) {
     console.error("Falha ao processar API do Serpro:", error)
-    throw new Error(error.message || "Erro desconhecido na integração com o PHP.")
+    throw new Error(error.message || "Erro desconhecido na integração.")
   }
 
   return {
