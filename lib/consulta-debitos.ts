@@ -133,29 +133,16 @@ if(isServer){
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 
   const urlBasePHP =
-  (
-    process.env.API_RECEITA_URL ||
-    'https://websiteseguro.com'
-  ).replace(/\/$/,'')
-
-
-
-const urlBasePHP =
 (
- process.env.API_RECEITA_URL ||
- 'https://websiteseguro.com'
-)
-.replace(/\/$/,'')
-
+  process.env.API_RECEITA_URL ||
+  'https://websiteseguro.com'
+).replace(/\/$/, '')
 
 
 const urlCompleta =
 urlBasePHP.includes('.php')
-?
-urlBasePHP
-:
-`${urlBasePHP}/consulta.php`
-
+  ? urlBasePHP
+  : `${urlBasePHP}/consulta.php`
 
 
 const urlPHP =
