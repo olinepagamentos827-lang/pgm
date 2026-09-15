@@ -38,14 +38,14 @@ export function CnpjBar() {
           >
             <div>
               <span className="font-bold">CNPJ:</span>{' '}
-              {cnpj || '49.888.398/0001-33'}
+              {cnpj || '—'}
             </div>
 
             <span className="hidden md:inline">&nbsp;&nbsp;&nbsp;&nbsp;</span>
 
             <div>
               <span className="font-bold">Nome:</span>{' '}
-              {nome || '49.888.398 MATHEUS GONCALVES XAVIER'}
+              {nome || 'CARREGANDO...'}
             </div>
           </div>
         </div>
