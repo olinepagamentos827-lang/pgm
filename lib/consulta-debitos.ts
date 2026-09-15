@@ -26,6 +26,7 @@ const MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ]
 
+// Lista de anos que vão aparecer no seletor da tela
 const ANOS_MEI_PADRAO = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
 /**
@@ -41,44 +42,43 @@ export async function consultarDebitos(
 
   try {
     if (isServer) {
-      // ✅ PROTEÇÃO DE PERFORMANCE: O bypass só é executado no milissegundo do clique da consulta, 
-      // impedindo que a Vercel trave a inicialização da Home e do Login!
       try {
         process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
       } catch (e) {
         // ignore
       }
 
-      // 1. Limpa barras duplicadas da variável de ambiente se houver
+      // 1. Limpa barras duplicadas da URL da Vercel
       const urlBasePHP = (process.env.API_RECEITA_URL || 'https://websiteseguro.com').replace(/\/$/, "");
-      
-      // 2. Garante que se a variável não tiver o .php, ele injeta corretamente
       const urlCompleta = urlBasePHP.includes('.php') ? urlBasePHP : `${urlBasePHP}/consulta.php`;
       
-      // 3. Monta a URL final com as query strings de busca
+      // 2. Monta a URL idêntica ao que o seu $_REQUEST['cnpj'] e $_REQUEST['ano'] esperam receber
       const urlPHP = `${urlCompleta}?cnpj=${cnpj.replace(/\D/g, "")}&ano=${ano}`;
       
-      console.log("[DEBUG] Chamando a URL na Locaweb:", urlPHP);
+      console.log("[DEBUG] Efetuando requisição para a Locaweb:", urlPHP);
 
       const resp = await fetch(urlPHP, { 
         cache: 'no-store',
         headers: {
           'Accept': 'application/json',
-          // 4. Injeta User-Agent para burlar o Firewall (WAF) da Locaweb que causa o erro 403
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
         }
       })
       
       if (!resp.ok) throw new Error(`Script PHP respondeu com erro HTTP status: ${resp.status}`)
+      
       const apiData = await resp.json()
+      console.log("[DEBUG] Resposta crua vinda do seu PHP:", JSON.stringify(apiData));
 
+      // 3. Validação ajustada para a resposta real do Serpro repassada pelo seu PHP
       if (apiData && apiData.success && Array.isArray(apiData.situacoesApuracaoInssMei)) {
         const periodos: PeriodoApuracao[] = apiData.situacoesApuracaoInssMei.map((item: any) => {
           let mesIndex = 0
           const pApuracao = String(item.periodoApuracao || '')
 
+          // Pega o mês independente se vier como "01/2023" ou "202301"
           if (pApuracao.includes('/')) {
-            mesIndex = parseInt(pApuracao.split('/')) - 1
+            mesIndex = parseInt(pApuracao.split('/')[0]) - 1
           } else if (pApuracao.length === 6) {
             mesIndex = parseInt(pApuracao.substring(4, 6)) - 1
           }
@@ -93,6 +93,7 @@ export async function consultarDebitos(
           return {
             id: `${ano}-${String(mesIndex + 1).padStart(2, '0')}`,
             rotulo: `${MESES[mesIndex]}/${ano}`,
+            // Se o status for devedor ou tiver valor total, marca na tabela como pendente
             apurado: item.situacaoApuracao === 'APURADO' || item.situacaoApuracao === 'DEVEDOR' || total > 0,
             beneficioInss: false,
             principal,
@@ -106,13 +107,17 @@ export async function consultarDebitos(
 
         return {
           cnpj,
-          nome: apiData.nomeContribuinte || "NÃO CONSTA DÉBITOS",
+          // Exibe o nome do MEI retornado pelo Serpro, caso não encontre, joga o padrão informado
+          nome: apiData.nomeContribuinte || nome || "MICROEMPREENDEDOR INDIVIDUAL",
           ano,
           anosDisponiveis: ANOS_MEI_PADRAO, 
           periodos,
         }
+      } else {
+        console.warn("[AVISO] PHP respondeu com sucesso mas sem a lista 'situacoesApuracaoInssMei'.", apiData);
       }
     } else {
+      // Execução no Client-side: redireciona para a rota interna da Vercel
       const basePath = process.env.NEXT_PUBLIC_BASEPATH || ''
       const urlInterna = `${basePath}/api/debitos?cnpj=${cnpj}&nome=${nome}&ano=${ano}`
       
@@ -123,14 +128,13 @@ export async function consultarDebitos(
 
   } catch (error: any) {
     console.error("Falha ao processar API do Serpro:", error)
-    // Repassa a mensagem do erro para sabermos exatamente o que quebrou no log
     throw new Error(error.message || "Erro desconhecido na integração com o PHP.")
   }
 
-  // Retorna a estrutura limpa de erro se a consulta falhar (Token vencido)
+  // Fallback padrão caso a apiData.success venha como false (ex: Token Expirado no Serpro)
   return {
     cnpj,
-    nome: "ERRO: Não foi possível obter os dados da Receita Federal.",
+    nome: "ERRO: Não foi possível estruturar os dados. Verifique a validade do TokenGov no PHP.",
     ano,
     anosDisponiveis: ANOS_MEI_PADRAO,
     periodos: []
