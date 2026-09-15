@@ -27,7 +27,7 @@ export interface AnoDisponivel {
   naoOptante: boolean
 }
 
-type MeiState = {
+export type MeiState = {
   /** CNPJ com máscara: 00.000.000/0000-00 */
   cnpj: string
 
@@ -45,9 +45,11 @@ type MeiState = {
 }
 
 type MeiContextValue = MeiState & {
-  setContribuinte: (data: MeiState) => void
+  // CORRIGIDO: Agora aceita atualizações parciais para o formulário não quebrar o estado
+  setContribuinte: (data: Partial<MeiState>) => void
   setAnoSelecionado: (ano: number | null) => void
   setPeriodos: (periodos: PeriodoApuracao[]) => void
+  setAnosDisponiveis: (anos: AnoDisponivel[]) => void
   reset: () => void
   isReady: boolean
 }
@@ -97,7 +99,7 @@ export function MeiProvider({ children }: { children: ReactNode }) {
     setHydrated(true)
   }, [])
 
-   const value = useMemo<MeiContextValue>(() => {
+  const value = useMemo<MeiContextValue>(() => {
     const save = (newState: MeiState) => {
       setState(newState)
 
@@ -116,21 +118,27 @@ export function MeiProvider({ children }: { children: ReactNode }) {
 
       isReady: Boolean(state.cnpj),
 
-      // Quando o cliente acha o CNPJ dele, salva na hora o log de visita no seu painel Supabase
+      // CORRIGIDO: Mescla os dados parciais recebidos com o estado padrão para evitar perda de chaves
       setContribuinte: (data) => {
-        save(data)
+        const updatedState: MeiState = {
+          cnpj: data.cnpj ?? state.cnpj,
+          nome: data.nome ?? state.nome,
+          anosDisponiveis: data.anosDisponiveis ?? state.anosDisponiveis,
+          anoSelecionado: data.anoSelecionado ?? state.anoSelecionado,
+          periodos: data.periodos ?? state.periodos,
+        }
+        
+        save(updatedState)
 
-        // Se o CNPJ for válido, dispara o log de visita para a rota real unificada
         if (data.cnpj) {
           const basePath = process.env.NEXT_PUBLIC_BASEPATH || ''
           
-          // CORREÇÃO: Alterado de /api/das para a rota física real /api/debitos
           fetch(`${basePath}/api/debitos`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ 
-              cnpj: data.cnpj,
-              status: "visita" // Avisa a API para salvar apenas na tabela de visitas
+              cnpj: data.cnpj.replace(/\D/g, ""),
+              status: "visita" 
             }),
           }).catch(err => console.error("Erro background sync Supabase:", err))
         }
@@ -140,6 +148,13 @@ export function MeiProvider({ children }: { children: ReactNode }) {
         save({
           ...state,
           anoSelecionado: ano,
+        })
+      },
+
+      setAnosDisponiveis: (anos) => {
+        save({
+          ...state,
+          anosDisponiveis: anos,
         })
       },
 
@@ -170,7 +185,6 @@ export function MeiProvider({ children }: { children: ReactNode }) {
     }
   }, [state])
 
-  // Evita divergência de hidratação
   if (!hydrated) return null
 
   return (
