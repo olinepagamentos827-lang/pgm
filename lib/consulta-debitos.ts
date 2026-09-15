@@ -19,7 +19,7 @@ export interface ConsultaDebitosResponse {
   ano: number
   anosDisponiveis: number[]
   periodos: PeriodoApuracao[]
-  error?: string // Adicionado campo de erro para tratar no front-end
+  error?: string
 }
 
 const MESES = [
@@ -67,7 +67,35 @@ export async function consultarDebitos(
       const apiData = await resp.json()
       console.log("[DEBUG] Payload cru recebido do PHP:", JSON.stringify(apiData));
 
-      // 1. CAPTURA DE ERRO REAL: Se o PHP ou o Serpro disserem que falhou (CNPJ falso ou Token expirado)
+      // 1. TRATAMENTO INTELIGENTE PARA CNPJ BAIXADO:
+      // Se a resposta contiver erro, mas o erro for especificamente que o contribuinte está BAIXADO,
+      // nós PERMITIMOS a entrada retornando uma estrutura limpa (com os períodos vazios apenas para este ano da baixa).
+      if (apiData && apiData['mensagem-erro']) {
+        const textoErro = String(apiData['mensagem-erro'].texto || '');
+        const codigoErro = String(apiData['mensagem-erro'].codigo || '');
+        
+        if (textoErro.toLowerCase().includes('baixado') || codigoErro === '23033') {
+          console.log("[DEBUG] CNPJ válido porém baixado. Permitindo acesso para consulta de anos anteriores.");
+          return {
+            cnpj,
+            nome: apiData.nomeContribuinte || nome || "MICROEMPREENDEDOR INDIVIDUAL (BAIXADO)",
+            ano,
+            anosDisponiveis: ANOS_MEI_PADRAO,
+            periodos: [], // Deixa a tabela vazia para 2026, mas permite que o usuário mude o ano lá dentro!
+          }
+        }
+
+        // Se for QUALQUER OUTRO ERRO da receita (ex: CNPJ falso/inexistente), aí sim nós barramos
+        return {
+          cnpj,
+          nome: "CNPJ APRESENTA RESTRICAO",
+          ano,
+          anosDisponiveis: ANOS_MEI_PADRAO,
+          periodos: [],
+          error: apiData['mensagem-erro'].texto || "Este CNPJ não possui dados válidos para consulta."
+        }
+      }
+
       if (apiData && apiData.success === false) {
         return {
           cnpj,
@@ -75,7 +103,7 @@ export async function consultarDebitos(
           ano,
           anosDisponiveis: ANOS_MEI_PADRAO,
           periodos: [],
-          error: apiData.error || "Falha na validação dos dados junto ao Serpro."
+          error: apiData.error || "Falha na validação junto ao Serpro."
         }
       }
 
@@ -83,7 +111,7 @@ export async function consultarDebitos(
                              apiData.situacoesApuracaoInssMei || 
                              apiData.situacaoApuracaoInssMei;
 
-      // 2. Se a consulta retornou sucesso e tem a lista de meses
+      // 2. Fluxo normal para quando o ano consultado retornar os meses com sucesso
       if (apiData && apiData.success && Array.isArray(listaApuracoes)) {
         const periodos: PeriodoApuracao[] = listaApuracoes.map((item: any) => {
           let mesIndex = 0
@@ -138,14 +166,13 @@ export async function consultarDebitos(
     throw new Error(error.message || "Erro desconhecido na integração com o PHP.")
   }
 
-  // Fallback para quando a estrutura do JSON vier totalmente irreconhecível
   return {
     cnpj,
     nome: "ERRO DE VALIDAÇÃO",
     ano,
     anosDisponiveis: ANOS_MEI_PADRAO,
     periodos: [],
-    error: "O servidor retornou uma resposta inválida."
+    error: "Não foi possível obter dados para este CNPJ no momento."
   }
 }
 
