@@ -1,3 +1,5 @@
+import { NextResponse } from 'next/server'
+
 export interface PeriodoApuracao {
   id: string
   rotulo: string
@@ -47,13 +49,23 @@ export async function consultarDebitos(
         // ignore
       }
 
-      const urlBasePHP = process.env.API_RECEITA_URL || 'https://websiteseguro.com'
-      const urlPHP = `${urlBasePHP}?cnpj=${cnpj.replace(/\D/g, "")}&ano=${ano}`
+      // 1. Limpa barras duplicadas da variável de ambiente se houver
+      const urlBasePHP = (process.env.API_RECEITA_URL || 'https://websiteseguro.com').replace(/\/$/, "");
       
+      // 2. Garante que se a variável não tiver o .php, ele injeta corretamente
+      const urlCompleta = urlBasePHP.includes('.php') ? urlBasePHP : `${urlBasePHP}/consulta.php`;
+      
+      // 3. Monta a URL final com as query strings de busca
+      const urlPHP = `${urlCompleta}?cnpj=${cnpj.replace(/\D/g, "")}&ano=${ano}`;
+      
+      console.log("[DEBUG] Chamando a URL na Locaweb:", urlPHP);
+
       const resp = await fetch(urlPHP, { 
         cache: 'no-store',
         headers: {
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          // 4. Injeta User-Agent para burlar o Firewall (WAF) da Locaweb que causa o erro 403
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
         }
       })
       
@@ -109,8 +121,10 @@ export async function consultarDebitos(
       return await resp.json()
     }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Falha ao processar API do Serpro:", error)
+    // Repassa a mensagem do erro para sabermos exatamente o que quebrou no log
+    throw new Error(error.message || "Erro desconhecido na integração com o PHP.")
   }
 
   // Retorna a estrutura limpa de erro se a consulta falhar (Token vencido)
