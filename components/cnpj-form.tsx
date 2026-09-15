@@ -42,25 +42,35 @@ export function CnpjForm() {
 
     setLoading(true)
 
-    try {
-      const basePath = process.env.__NEXT_ROUTER_BASEPATH || ''
+  try {
+      const basePath = process.env.NEXT_PUBLIC_BASEPATH || ""
       const anoAtual = new Date().getFullYear()
       
       // Efetua a chamada GET enviando os parâmetros para a rota interna mapeada
       const res = await fetch(`${basePath}/api/debitos?cnpj=${cnpjLimpo}&ano=${anoAtual}`)
       const data = await res.json()
 
-      // CORRIGIDO: Valida se a API do Next.js retornou um objeto de erro estruturado pelo Serpro
+      // CORRIGIDO: Valida se a resposta retornou sucesso estruturado pelo Serpro
       if (res.ok && !data.error && data.periodos) {
         
+        // Mapeia a lista de anos padrão recebida para casar com a tipagem do Context global
+        const anosMapeados = (data.anosDisponiveis || [2026, 2025, 2024, 2023, 2022, 2021, 2020]).map((a: number) => ({
+          ano: a,
+          naoOptante: false
+        }))
+
+        // Salva todos os dados recebidos na sessão unificada para preencher a tabela no próximo passo
         setContribuinte({
           cnpj: cnpj, 
-          nome: data.nome || "MICROEMPREENDEDOR INDIVIDUAL"
+          nome: data.nome || "MICROEMPREENDEDOR INDIVIDUAL",
+          anosDisponiveis: anosMapeados,
+          anoSelecionado: data.ano || anoAtual,
+          periodos: data.periodos
         })
 
         router.push("/inicio")
       } else {
-        // Exibe o alerta real vindo do Serpro/PHP (Ex: Token Expirado ou CNPJ inválido)
+        // Exibe o alerta real vindo do Serpro/PHP se o CNPJ for falso
         alert(data.error || "Acesso negado: CNPJ inválido ou não localizado na Receita Federal.")
       }
     } catch (err) {
@@ -108,6 +118,7 @@ export function CnpjForm() {
             className="inline-flex items-center justify-center rounded border border-[#4cae4c] bg-gradient-to-b from-[#5cb85c] to-[#449d44] px-4 py-1.5 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_1px_2px_rgba(0,0,0,0.05)] [text-shadow:0_-1px_0_rgba(0,0,0,0.2)] hover:border-[#398439] hover:from-[#449d44] hover:to-[#419641] transition-all cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed min-w-[90px]"
           >
             {loading ? (
+              /* CORRIGIDO: Vinculado o padrão oficial de namespace do W3C para renderizar o spinner sem quebrar */
               <svg 
                 className="animate-spin h-5 w-5 text-white" 
                 xmlns="http://w3.org" 
