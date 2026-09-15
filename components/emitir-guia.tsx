@@ -205,14 +205,16 @@ export function EmitirGuia() {
                         </td>
                       </tr>
                     )}
-                  </tbody>
+                                   </tbody>
                 </table>
               </div>
             )}
-            {/* FAIXA CINZA OFICIAL INFERIOR (DATA E BOTÕES DE AÇÃO) */}
+
+            {/* FAIXA CINZA OFICIAL INFERIOR */}
             <div 
               className="
                 -mx-4 
+
                 -mb-4 
                 mt-6 
                 border-t 
