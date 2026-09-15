@@ -76,8 +76,10 @@ try{
 const isServer = typeof window === 'undefined'
 
 
-if(isServer){
+if (isServer) {
 
+  // Temporário enquanto a Locaweb corrige a cadeia SSL
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const urlBasePHP =
 (process.env.API_RECEITA_URL || 
