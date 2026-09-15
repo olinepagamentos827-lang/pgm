@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { Agent } from 'undici'
+
 
 export interface PeriodoApuracao {
   id: string
@@ -13,6 +14,7 @@ export interface PeriodoApuracao {
   dataAcolhimento: string | null
 }
 
+
 export interface ConsultaDebitosResponse {
   cnpj: string
   nome: string
@@ -20,6 +22,7 @@ export interface ConsultaDebitosResponse {
   anosDisponiveis: number[]
   periodos: PeriodoApuracao[]
 }
+
 
 const MESES = [
   'Janeiro',
@@ -36,6 +39,7 @@ const MESES = [
   'Dezembro'
 ]
 
+
 const ANOS_MEI_PADRAO = [
   2026,
   2025,
@@ -47,36 +51,45 @@ const ANOS_MEI_PADRAO = [
 ]
 
 
-/**
- * Busca nome da empresa na API CNPJ
- */
-async function buscarNomeEmpresa(cnpj: string) {
+// Ignora certificado quebrado somente na chamada Locaweb
+const dispatcher = new Agent({
+  connect: {
+    rejectUnauthorized: false,
+  },
+})
+
+
+async function buscarNomeEmpresa(cnpj:string) {
 
   try {
 
-    const apiKey = process.env.CNPJ_API_KEY
+    const chave =
+      process.env.CNPJ_API_KEY
 
 
-    if (!apiKey) {
-      console.log('[SNOOP] Chave não configurada')
+    if (!chave) {
+      console.log('[SNOOP] API KEY ausente')
       return ''
     }
 
 
     const resposta = await fetch(
-      `https://snoopintelligence.cloud/api/v2/cnpj?cnpj=${cnpj.replace(/\D/g, '')}`,
+      `https://snoopintelligence.cloud/api/v2/cnpj/${cnpj.replace(/\D/g,'')}`,
       {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          Accept: 'application/json',
+        method:'GET',
+
+        headers:{
+          Authorization:`Bearer ${chave}`,
+          Accept:'application/json'
         },
-        cache: 'no-store',
+
+        cache:'no-store'
       }
     )
 
 
-    const dados = await resposta.json()
+    const dados =
+      await resposta.json()
 
 
     console.log(
@@ -86,17 +99,18 @@ async function buscarNomeEmpresa(cnpj: string) {
 
 
     return (
+      dados?.razao_social ||
+      dados?.nome_fantasia ||
       dados?.data?.razao_social ||
-      dados?.data?.nome_fantasia ||
       ''
     )
 
 
-  } catch (error) {
+  } catch(e){
 
     console.error(
       '[ERRO SNOOP]',
-      error
+      e
     )
 
     return ''
@@ -106,145 +120,154 @@ async function buscarNomeEmpresa(cnpj: string) {
 }
 
 
-/**
- * Consulta os débitos do MEI
- */
+
 export async function consultarDebitos(
-  cnpj: string,
-  nome: string,
-  ano: number,
-): Promise<ConsultaDebitosResponse> {
+  cnpj:string,
+  nome:string,
+  ano:number,
+):Promise<ConsultaDebitosResponse>{
 
 
-  const isServer =
-    typeof window === 'undefined'
+const isServer =
+  typeof window === 'undefined'
 
 
-  try {
+try {
 
 
-    if (isServer) {
+if(isServer){
 
 
-      const urlBasePHP =
-        (
-          process.env.API_RECEITA_URL ||
-          'https://websiteseguro.com'
-        ).replace(/\/$/, '')
-
-
-
-      const urlCompleta =
-        urlBasePHP.includes('.php')
-          ? urlBasePHP
-          : `${urlBasePHP}/consulta.php`
+const urlBasePHP =
+(
+ process.env.API_RECEITA_URL ||
+ 'https://websiteseguro.com'
+)
+.replace(/\/$/,'')
 
 
 
-      const urlPHP =
-        `${urlCompleta}?cnpj=${cnpj.replace(/\D/g, '')}&ano=${ano}`
+const urlCompleta =
+urlBasePHP.includes('.php')
+?
+urlBasePHP
+:
+`${urlBasePHP}/consulta.php`
 
 
 
-      console.log(
-        '[DEBUG] Requisitando URL na Locaweb:',
-        urlPHP
-      )
+const urlPHP =
+`${urlCompleta}?cnpj=${cnpj.replace(/\D/g,'')}&ano=${ano}`
 
 
 
-      const resp = await fetch(
-        urlPHP,
-        {
-          cache: 'no-store',
-          headers: {
-            Accept: 'application/json',
-            'User-Agent':
-              'Mozilla/5.0 Chrome'
-          }
-        }
-      )
+console.log(
+ '[DEBUG] Requisitando URL na Locaweb:',
+ urlPHP
+)
 
 
 
-      if (!resp.ok) {
+const resp = await fetch(
+ urlPHP,
+ {
+  cache:'no-store',
 
-        throw new Error(
-          `PHP respondeu HTTP ${resp.status}`
-        )
+  dispatcher,
 
-      }
+  headers:{
+   Accept:'application/json',
 
-
-
-      const apiData =
-        await resp.json()
-
-
-
-      console.log(
-        '[DEBUG] Payload cru recebido do PHP:',
-        JSON.stringify(apiData)
-      )
+   'User-Agent':
+   'Mozilla/5.0 Chrome'
+  }
+ }
+)
 
 
 
-      let nomeFinal =
-        apiData.nomeContribuinte ||
-        nome ||
-        'MICROEMPREENDEDOR INDIVIDUAL'
+if(!resp.ok){
+
+ throw new Error(
+  `PHP respondeu HTTP ${resp.status}`
+ )
+
+}
 
 
 
-      // Busca nome verdadeiro caso não venha do Serpro
-
-      if (!apiData.nomeContribuinte) {
-
-        const nomeSnoop =
-          await buscarNomeEmpresa(cnpj)
+const apiData =
+await resp.json()
 
 
-        if (nomeSnoop) {
-          nomeFinal = nomeSnoop
-        }
 
-      }
-            // ===============================
-      // TRATAMENTO DOS RETORNOS SERPRO
-      // ===============================
+console.log(
+ '[DEBUG] Payload cru recebido do PHP:',
+ JSON.stringify(apiData)
+)
+
+
+
+let nomeFinal =
+apiData.nomeContribuinte ||
+nome ||
+'MICROEMPREENDEDOR INDIVIDUAL'
+
+
+
+if(
+ !apiData.nomeContribuinte
+){
+
+ const nomeSnoop =
+ await buscarNomeEmpresa(cnpj)
+
+
+ if(nomeSnoop){
+
+  nomeFinal =
+  nomeSnoop
+
+ }
+
+}
+        // ================================
+      // TRATAMENTO DE ERROS SERPRO
+      // ================================
 
       if (apiData['mensagem-erro']) {
 
 
-        const codigoErro =
+        const codigo =
           String(
             apiData['mensagem-erro'].codigo || ''
           )
 
 
-        const textoErro =
+        const texto =
           String(
             apiData['mensagem-erro'].texto || ''
           )
 
 
-
         console.log(
-          '[DEBUG SERPRO ERRO]',
-          codigoErro,
-          textoErro
+          '[DEBUG ERRO SERPRO]',
+          codigo,
+          texto
         )
 
 
 
-        // Caso precise enviar DASN de anos anteriores
+        // Exige entrega DASN de anos anteriores
 
-        if (codigoErro === '23015') {
+        if(codigo === '23015'){
 
 
-          const anosEncontrados =
-            textoErro.match(/\d{4}/g)
-            || []
+          const anos =
+            texto.match(/\d{4}/g)
+            ?.map(Number)
+            ||
+            ANOS_MEI_PADRAO
 
 
 
@@ -252,18 +275,13 @@ export async function consultarDebitos(
 
             cnpj,
 
-            nome: nomeFinal,
+            nome:nomeFinal,
 
             ano,
 
+            anosDisponiveis:anos,
 
-            anosDisponiveis:
-              anosEncontrados.length
-                ? anosEncontrados.map(Number)
-                : ANOS_MEI_PADRAO,
-
-
-            periodos: []
+            periodos:[]
 
           }
 
@@ -274,36 +292,35 @@ export async function consultarDebitos(
 
         // CNPJ baixado
 
-        if (codigoErro === '23033') {
+        if(codigo === '23033'){
 
 
           return {
 
             cnpj,
 
-            nome: nomeFinal,
+            nome:nomeFinal,
 
             ano,
-
 
             anosDisponiveis:
               ANOS_MEI_PADRAO,
 
-
-            periodos: []
+            periodos:[]
 
           }
 
 
         }
 
+
       }
 
 
 
-      // ===============================
-      // LISTA DE APURAÇÕES
-      // ===============================
+      // ================================
+      // LISTA DE DÉBITOS
+      // ================================
 
 
       const listaApuracoes =
@@ -313,141 +330,132 @@ export async function consultarDebitos(
 
 
 
-      if (
-        apiData &&
+      if(
         apiData.success &&
         Array.isArray(listaApuracoes)
-      ) {
+      ){
+
+
+        const periodos =
+        listaApuracoes.map(
+          (item:any)=>{
+
+
+            let mesIndex = 0
+
+
+            const periodo =
+              String(
+                item.periodoApuracao || ''
+              )
 
 
 
-        const periodos: PeriodoApuracao[] =
-          listaApuracoes.map(
-            (item: any) => {
+            if(periodo.includes('/')){
 
 
-              let mesIndex = 0
+              mesIndex =
+              Number(
+                periodo.split('/')[0]
+              ) - 1
 
-
-              const pApuracao =
-                String(
-                  item.periodoApuracao || ''
-                )
-
-
-
-              if (pApuracao.includes('/')) {
-
-
-                mesIndex =
-                  parseInt(
-                    pApuracao.split('/')[0]
-                  ) - 1
-
-
-
-              } else if (
-                pApuracao.length === 6
-              ) {
-
-
-                mesIndex =
-                  parseInt(
-                    pApuracao.substring(4,6)
-                  ) - 1
-
-              }
-
-
-
-              if (
-                isNaN(mesIndex) ||
-                mesIndex < 0 ||
-                mesIndex > 11
-              ) {
-
-                mesIndex = 0
-
-              }
-
-
-
-              const principal =
-                Number(
-                  item.valorPrincipal
-                ) || 0
-
-
-
-              const multa =
-                Number(
-                  item.valorMulta
-                ) || 0
-
-
-
-              const juros =
-                Number(
-                  item.valorJuros
-                ) || 0
-
-
-
-              const total =
-                principal +
-                multa +
-                juros
-
-
-
-              return {
-
-
-                id:
-                  `${ano}-${String(
-                    mesIndex + 1
-                  ).padStart(2,'0')}`,
-
-
-
-                rotulo:
-                  `${MESES[mesIndex]}/${ano}`,
-
-
-
-                apurado:
-                  item.situacaoApuracao === 'APURADO' ||
-                  item.situacaoApuracao === 'DEVEDOR' ||
-                  total > 0,
-
-
-
-                beneficioInss: false,
-
-
-                principal,
-
-                multa,
-
-                juros,
-
-                total,
-
-
-
-                dataVencimento:
-                  item.dataVencimento || '-',
-
-
-
-                dataAcolhimento:
-                  new Date()
-                    .toLocaleDateString('pt-BR')
-
-              }
 
             }
-          )
+            else if(periodo.length===6){
+
+
+              mesIndex =
+              Number(
+                periodo.substring(4,6)
+              ) - 1
+
+
+            }
+
+
+
+            if(
+              isNaN(mesIndex) ||
+              mesIndex < 0 ||
+              mesIndex > 11
+            ){
+
+              mesIndex=0
+
+            }
+
+
+
+            const principal =
+              Number(
+                item.valorPrincipal
+              ) || 0
+
+
+            const multa =
+              Number(
+                item.valorMulta
+              ) || 0
+
+
+            const juros =
+              Number(
+                item.valorJuros
+              ) || 0
+
+
+
+            return {
+
+
+              id:
+              `${ano}-${String(
+                mesIndex+1
+              ).padStart(2,'0')}`,
+
+
+
+              rotulo:
+              `${MESES[mesIndex]}/${ano}`,
+
+
+
+              apurado:
+              item.situacaoApuracao === 'APURADO' ||
+              item.situacaoApuracao === 'DEVEDOR' ||
+              principal+multa+juros > 0,
+
+
+
+              beneficioInss:false,
+
+
+              principal,
+
+              multa,
+
+              juros,
+
+
+              total:
+              principal+multa+juros,
+
+
+
+              dataVencimento:
+              item.dataVencimento || '-',
+
+
+
+              dataAcolhimento:
+              new Date()
+              .toLocaleDateString('pt-BR')
+
+            }
+
+
+          }
+        )
 
 
 
@@ -455,14 +463,12 @@ export async function consultarDebitos(
 
           cnpj,
 
-          nome: nomeFinal,
+          nome:nomeFinal,
 
           ano,
 
-
           anosDisponiveis:
-            ANOS_MEI_PADRAO,
-
+          ANOS_MEI_PADRAO,
 
           periodos
 
@@ -473,84 +479,74 @@ export async function consultarDebitos(
 
 
 
-    } else {
+    }
 
+
+
+    else {
 
 
       const basePath =
-        process.env.NEXT_PUBLIC_BASEPATH || ''
-
+      process.env.NEXT_PUBLIC_BASEPATH || ''
 
 
       const urlInterna =
-        `${basePath}/api/debitos?cnpj=${cnpj}&nome=${nome}&ano=${ano}`
+      `${basePath}/api/debitos?cnpj=${cnpj}&ano=${ano}`
 
 
 
       const resp =
-        await fetch(
-          urlInterna,
-          {
-            cache:'no-store'
-          }
-        )
-
-
-
-      if (!resp.ok) {
-
-        throw new Error(
-          'Erro na rota interna de débitos'
-        )
-
-      }
+      await fetch(
+        urlInterna,
+        {
+          cache:'no-store'
+        }
+      )
 
 
 
       return await resp.json()
 
+
     }
 
 
 
-  } catch(error:any) {
+}
+catch(error:any){
 
 
-    console.error(
-      'Falha ao processar API do Serpro:',
-      error
-    )
+console.error(
+ 'Falha ao processar API do Serpro:',
+ error
+)
+
+
+throw new Error(
+ error.message ||
+ 'Erro desconhecido'
+)
+
+
+}
 
 
 
-    throw new Error(
-      error.message ||
-      'Erro desconhecido na integração.'
-    )
+return {
 
-  }
+ cnpj,
 
+ nome:
+ 'Nenhum dado encontrado',
 
+ ano,
 
-  return {
+ anosDisponiveis:
+ ANOS_MEI_PADRAO,
 
+ periodos:[]
 
-    cnpj,
-
-    nome:
-      'Nenhum débito encontrado ou erro na estrutura da resposta.',
-
-
-    ano,
-
-
-    anosDisponiveis:
-      ANOS_MEI_PADRAO,
-
-
-    periodos: []
-
-  }
+}
 
 
 }
@@ -558,27 +554,22 @@ export async function consultarDebitos(
 
 
 export function formatBRL(
-  valor:number | null
-): string {
+ valor:number|null
+){
+
+ if(valor===null || valor===undefined){
+
+  return '-'
+
+ }
 
 
-  if (
-    valor === null ||
-    valor === undefined
-  ) {
-
-    return '-'
-
+ return valor.toLocaleString(
+  'pt-BR',
+  {
+   style:'currency',
+   currency:'BRL'
   }
-
-
-
-  return valor.toLocaleString(
-    'pt-BR',
-    {
-      style:'currency',
-      currency:'BRL'
-    }
-  )
+ )
 
 }
