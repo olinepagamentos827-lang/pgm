@@ -50,26 +50,20 @@ export function CnpjForm() {
       const res = await fetch(`${basePath}/api/debitos?cnpj=${cnpjLimpo}&ano=${anoAtual}`)
       const data = await res.json()
 
-      // CORRIGIDO: Valida se a resposta retornou sucesso estruturado pelo Serpro
-      if (res.ok && !data.error && data.periodos) {
-        
-        // Mapeia a lista de anos padrão recebida para casar com a tipagem do Context global
-        const anosMapeados = (data.anosDisponiveis || [2026, 2025, 2024, 2023, 2022, 2021, 2020]).map((a: number) => ({
-          ano: a,
-          naoOptante: false
-        }))
+      // Localize o bloco de sucesso no seu CnpjForm e simplifique para salvar assim:
+if (res.ok && !data.error && data.periodos) {
+  
+  setContribuinte({
+    cnpj: cnpj, 
+    nome: data.nome || "MICROEMPREENDEDOR INDIVIDUAL",
+    anosDisponiveis: data.anosDisponiveis, // Puxa os objetos prontos com as flags do servidor
+    anoSelecionado: data.ano || anoAtual,
+    periodos: data.periodos
+  })
 
-        // Salva todos os dados recebidos na sessão unificada para preencher a tabela no próximo passo
-        setContribuinte({
-          cnpj: cnpj, 
-          nome: data.nome || "MICROEMPREENDEDOR INDIVIDUAL",
-          anosDisponiveis: anosMapeados,
-          anoSelecionado: data.ano || anoAtual,
-          periodos: data.periodos
-        })
-
-        router.push("/inicio")
-      } else {
+  router.push("/inicio")
+}
+ else {
         // Exibe o alerta real vindo do Serpro/PHP se o CNPJ for falso
         alert(data.error || "Acesso negado: CNPJ inválido ou não localizado na Receita Federal.")
       }
