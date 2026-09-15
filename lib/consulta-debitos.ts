@@ -19,6 +19,7 @@ export interface ConsultaDebitosResponse {
   ano: number
   anosDisponiveis: number[]
   periodos: PeriodoApuracao[]
+  error?: string // Adicionado campo de erro para tratar no front-end
 }
 
 const MESES = [
@@ -66,11 +67,23 @@ export async function consultarDebitos(
       const apiData = await resp.json()
       console.log("[DEBUG] Payload cru recebido do PHP:", JSON.stringify(apiData));
 
-      // Extrai a lista do Serpro aceitando as variações de chaves do JSON oficial do estaleiro
+      // 1. CAPTURA DE ERRO REAL: Se o PHP ou o Serpro disserem que falhou (CNPJ falso ou Token expirado)
+      if (apiData && apiData.success === false) {
+        return {
+          cnpj,
+          nome: "CNPJ INVÁLIDO OU NÃO ENCONTRADO",
+          ano,
+          anosDisponiveis: ANOS_MEI_PADRAO,
+          periodos: [],
+          error: apiData.error || "Falha na validação dos dados junto ao Serpro."
+        }
+      }
+
       const listaApuracoes = apiData.listaSituacaoApuracaoMei || 
                              apiData.situacoesApuracaoInssMei || 
                              apiData.situacaoApuracaoInssMei;
 
+      // 2. Se a consulta retornou sucesso e tem a lista de meses
       if (apiData && apiData.success && Array.isArray(listaApuracoes)) {
         const periodos: PeriodoApuracao[] = listaApuracoes.map((item: any) => {
           let mesIndex = 0
@@ -110,8 +123,6 @@ export async function consultarDebitos(
           anosDisponiveis: ANOS_MEI_PADRAO, 
           periodos,
         }
-      } else {
-        console.warn("[AVISO] Formato incompatível ou nenhuma apuração para este ano:", apiData);
       }
     } else {
       const basePath = process.env.NEXT_PUBLIC_BASEPATH || ''
@@ -127,12 +138,14 @@ export async function consultarDebitos(
     throw new Error(error.message || "Erro desconhecido na integração com o PHP.")
   }
 
+  // Fallback para quando a estrutura do JSON vier totalmente irreconhecível
   return {
     cnpj,
-    nome: "Nenhum débito encontrado ou erro na estrutura da resposta.",
+    nome: "ERRO DE VALIDAÇÃO",
     ano,
     anosDisponiveis: ANOS_MEI_PADRAO,
-    periodos: []
+    periodos: [],
+    error: "O servidor retornou uma resposta inválida."
   }
 }
 
