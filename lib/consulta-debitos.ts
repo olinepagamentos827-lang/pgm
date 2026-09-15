@@ -1,4 +1,4 @@
-import { Agent } from 'undici'
+
 
 
 export interface PeriodoApuracao {
@@ -50,13 +50,6 @@ const ANOS_MEI_PADRAO = [
   2020
 ]
 
-
-// Ignora certificado quebrado somente na chamada Locaweb
-const dispatcher = new Agent({
-  connect: {
-    rejectUnauthorized: false,
-  },
-})
 
 
 async function buscarNomeEmpresa(cnpj:string) {
@@ -137,6 +130,15 @@ try {
 
 if(isServer){
 
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+
+  const urlBasePHP =
+  (
+    process.env.API_RECEITA_URL ||
+    'https://websiteseguro.com'
+  ).replace(/\/$/,'')
+
+
 
 const urlBasePHP =
 (
@@ -173,17 +175,13 @@ const resp = await fetch(
  {
   cache:'no-store',
 
-  dispatcher,
-
   headers:{
-   Accept:'application/json',
-
-   'User-Agent':
-   'Mozilla/5.0 Chrome'
+    Accept:'application/json',
+    'User-Agent':
+    'Mozilla/5.0 Chrome'
   }
  }
 )
-
 
 
 if(!resp.ok){
