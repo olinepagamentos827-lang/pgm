@@ -61,7 +61,6 @@ const ANOS_MEI_PADRAO = [
 ]
 
 
-
 async function consultarAno(
  cnpj:string,
  nome:string,
@@ -89,18 +88,22 @@ async function consultarAno(
  console.log('[DEBUG SERPRO]',url)
 
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+const resposta = await fetch(
+  url,
+  {
+    cache:'no-store',
+    signal:AbortSignal.timeout(20000),
+    headers:{
+      Accept:'application/json',
+      'User-Agent':'Mozilla/5.0'
+    },
 
- const resposta = await fetch(
- url,
- {
-  cache:'no-store',
-  signal:AbortSignal.timeout(15000),
-  headers:{
-   Accept:'application/json',
-   'User-Agent':'Mozilla/5.0'
+    // ignora certificado quebrado do parceiro
+    // @ts-ignore
+    dispatcher: undefined
   }
- }
- )
+)
 
 
  if(!resposta.ok){
@@ -166,35 +169,36 @@ async function consultarAno(
  if(apiData['mensagem-erro']){
 
 
-  console.log(
-  '[DEBUG SERPRO ERRO]',
-  apiData['mensagem-erro']
-  )
+console.log(
+ '[DEBUG SERPRO MSG]',
+ apiData['mensagem-erro']
+)
 
 
-  return {
+return {
 
-   cnpj,
+ cnpj,
 
-   nome:
-   nomeFinal ||
-   'MICROEMPREENDEDOR INDIVIDUAL',
+ nome:
+ nomeFinal ||
+ 'MICROEMPREENDEDOR INDIVIDUAL',
 
-   ano,
+ ano,
 
-   anosDisponiveis:
-   ANOS_MEI_PADRAO.map(a=>({
-    ano:a,
-    bloqueado:a!==ano,
-    motivo:
-    apiData['mensagem-erro'].texto
-   })),
+ anosDisponiveis:
+ ANOS_MEI_PADRAO.map(a=>({
+   ano:a,
+   bloqueado:false,
+   motivo:
+   apiData['mensagem-erro'].texto
+ })),
 
-   periodos:[]
+ periodos:[]
 
-  }
+}
 
- }
+
+}
 
 
 
@@ -515,7 +519,14 @@ export async function consultarDebitos(
 
 
 
-  return resultado
+return {
+ ...resultado,
+ anosDisponiveis:
+ ANOS_MEI_PADRAO.map(a=>({
+  ano:a,
+  bloqueado:false
+ }))
+}
 
 
 
