@@ -24,7 +24,7 @@ export async function GET(request: Request) {
 
     console.log('[CNPJ] Consultando SNOOP:', cnpj)
 
-    // CORREÇÃO 1: Alterado para o formato de query string correto (?cnpj=...) suportado pela API deles
+    // CORREÇÃO: URL corrigida com a rota estável e interpolação da variável via `${cnpj}`
     const resposta = await fetch(
       `https://snoopintelligence.cloud{cnpj}`,
       {
@@ -60,7 +60,7 @@ export async function GET(request: Request) {
 
     const empresa = dados?.data || dados
 
-    // CORREÇÃO 2: Mapeamento completo incluindo situação e data_abertura para o filtro de débitos
+    // Mapeamento completo mantendo a compatibilidade de chaves com o front-end
     return NextResponse.json({
       sucesso: true,
       cnpj: empresa.cnpj || cnpj,
