@@ -7,103 +7,75 @@ export interface ConsultaCnpjResponse {
 }
 
 
-export async function consultarCnpj(
-  cnpj:string
-):Promise<ConsultaCnpjResponse>{
+export async function consultarCnpj(cnpj:string){
+
+  try {
+
+    const cnpjLimpo = cnpj.replace(/\D/g,'')
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.VERCEL_URL ||
+      'http://localhost:3000'
 
 
-  try{
+    const url =
+      `${baseUrl}/api/cnpj?cnpj=${cnpjLimpo}`
 
 
-    const cnpjLimpo =
-      cnpj.replace(/\D/g,'')
+    console.log(
+      '[DEBUG CONSULTA CNPJ]',
+      url
+    )
 
 
-
-    const response =
+    const resposta =
       await fetch(
-        `${process.env.NEXT_PUBLIC_BASEPATH || ''}/api/cnpj?cnpj=${cnpjLimpo}`,
+        url,
         {
           cache:'no-store'
         }
       )
 
 
-    const texto =
-      await response.text()
+    if(!resposta.ok){
 
-
-
-    let dados:any = null
-
-
-    try{
-
-      dados =
-        JSON.parse(texto)
-
-    }
-    catch{
-
-      console.error(
-        '[ERRO PARSE CNPJ]',
-        texto.substring(0,300)
+      throw new Error(
+        `API CNPJ HTTP ${resposta.status}`
       )
 
-
-      return {
-
-        sucesso:false,
-
-        razaoSocial:'',
-
-        nomeFantasia:'',
-
-        cnpj:cnpjLimpo,
-
-        erro:'Resposta inválida da API CNPJ'
-
-      }
-
     }
 
 
+    const dados =
+      await resposta.json()
 
-    const empresa =
-      dados?.data || dados
 
+    console.log(
+      '[DEBUG RETORNO CNPJ]',
+      JSON.stringify(dados)
+    )
 
 
     return {
 
-
-      sucesso:true,
-
-
-      cnpj:
-        empresa.cnpj ||
-        cnpjLimpo,
-
-
       razaoSocial:
-        empresa.razao_social ||
-        empresa.razaoSocial ||
+        dados.razao_social ||
+        dados.razaoSocial ||
+        dados.data?.razao_social ||
         '',
 
 
       nomeFantasia:
-        empresa.nome_fantasia ||
-        empresa.nomeFantasia ||
-        '',
-
+        dados.nome_fantasia ||
+        dados.nomeFantasia ||
+        dados.data?.nome_fantasia ||
+        ''
 
     }
 
 
-
-  }
-  catch(error:any){
-
+  } catch(error){
 
     console.error(
       '[ERRO CONSULTA CNPJ]',
@@ -113,20 +85,11 @@ export async function consultarCnpj(
 
     return {
 
-      sucesso:false,
-
       razaoSocial:'',
-
-      nomeFantasia:'',
-
-      cnpj,
-
-      erro:error.message
+      nomeFantasia:''
 
     }
 
-
   }
-
 
 }
