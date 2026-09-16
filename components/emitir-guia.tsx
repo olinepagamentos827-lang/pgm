@@ -34,16 +34,16 @@ export function EmitirGuia() {
   const { cnpj, nome } = useMei()
 
   const [anoSelect, setAnoSelect] = useState('')
-  const [anoConsultado, setAnoConsultado] = useState<number | null>(null)
+  const [anoConsultado, setAnoConsultado] = useState<number | null>(2026)
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
   const [beneficio, setBeneficio] = useState<Set<string>>(new Set())
   const [dataPagamento, setDataPagamento] = useState('31/08/2026')
   const [pagamento, setPagamento] = useState<PagamentoInfo | null>(null)
 
   const key =
-    anoConsultado != null
-      ? `/api/debitos?cnpj=${encodeURIComponent(cnpj)}&nome=${encodeURIComponent(nome)}&ano=${anoConsultado}`
-      : null
+ cnpj
+ ? `/api/debitos?cnpj=${encodeURIComponent(cnpj)}&nome=${encodeURIComponent(nome)}`
+ : null
 
   const { data, isLoading, mutate } = useSWR(key, fetcher, {
     revalidateOnFocus: false,
@@ -62,12 +62,7 @@ export function EmitirGuia() {
       .reduce((acc, p) => acc + (p.total ?? 0), 0)
   }, [periodos, selecionados])
 
-  function handleConsultar() {
-    if (!anoSelect) return
-    setSelecionados(new Set())
-    setBeneficio(new Set())
-    setAnoConsultado(Number(anoSelect))
-  }
+ function handleConsultar() {
 
   function toggleSelecionado(id: string) {
     setSelecionados((prev) => {
