@@ -1,10 +1,17 @@
 export interface ConsultaCnpjResponse {
-  sucesso: boolean
-  razaoSocial: string
-  nomeFantasia: string
-  cnpj: string
-  erro?: string
+
+  sucesso:boolean
+
+  razaoSocial:string
+
+  nomeFantasia:string
+
+  cnpj:string
+
+  erro?:string
+
 }
+
 
 
 export async function consultarCnpj(
@@ -12,151 +19,189 @@ export async function consultarCnpj(
 ):Promise<ConsultaCnpjResponse>{
 
 
-  try {
+try {
 
 
-    const cnpjLimpo =
-      cnpj.replace(/\D/g,'')
+const cnpjLimpo =
+cnpj.replace(/\D/g,'')
 
 
-    const apiKey =
-      process.env.CNPJ_API_KEY
 
+const apiKey =
+process.env.CNPJ_API_KEY
 
 
-    if(!apiKey){
 
-      console.error(
-        '[SNOOP] API KEY AUSENTE'
-      )
+if(!apiKey){
 
-      return {
+return {
 
-        sucesso:false,
-        razaoSocial:'',
-        nomeFantasia:'',
-        cnpj:cnpjLimpo,
-        erro:'API KEY ausente'
+sucesso:false,
 
-      }
+razaoSocial:'',
 
-    }
+nomeFantasia:'',
 
+cnpj:cnpjLimpo,
 
+erro:'CNPJ_API_KEY ausente'
 
-    console.log(
-      '[SNOOP] Consultando:',
-      cnpjLimpo
-    )
+}
 
+}
 
 
-    const resposta =
-      await fetch(
-        `https://snoopintelligence.cloud/api/v2/cnpj?cnpj=${cnpjLimpo}`
-        {
 
-          method:'GET',
 
-          headers:{
+const url =
+`https://snoopintelligence.cloud/api/v2/cnpj?cnpj=${cnpjLimpo}`
 
-            Authorization:
-            `Bearer ${apiKey}`,
 
-            Accept:
-            'application/json'
 
-          },
+console.log(
+'[SNOOP CONSULTA]',
+url
+)
 
-          cache:'no-store'
 
-        }
-      )
 
+const resposta =
+await fetch(
+url,
+{
+method:'GET',
 
+headers:{
+Authorization:`Bearer ${apiKey}`,
+Accept:'application/json'
+},
 
-    const texto =
-      await resposta.text()
+cache:'no-store'
 
+}
+)
 
 
-    console.log(
-      '[SNOOP RAW]',
-      texto.substring(0,500)
-    )
 
+const texto =
+await resposta.text()
 
 
-    if(!resposta.ok){
 
-      throw new Error(
-        `SNOOP HTTP ${resposta.status}`
-      )
+console.log(
+'[SNOOP RAW]',
+texto.substring(0,300)
+)
 
-    }
 
 
+let dados:any
 
-    const dados =
-      JSON.parse(texto)
 
+try{
 
+dados =
+JSON.parse(texto)
 
-    const empresa =
-      dados?.data || dados
+}catch{
 
 
+return {
 
-    return {
+sucesso:false,
 
+razaoSocial:'',
 
-      sucesso:true,
+nomeFantasia:'',
 
+cnpj:cnpjLimpo,
 
-      cnpj:
-      empresa.cnpj ||
-      cnpjLimpo,
+erro:'Snoop retornou resposta inválida'
 
+}
 
-      razaoSocial:
-      empresa.razao_social ||
-      empresa.razaoSocial ||
-      '',
+}
 
 
-      nomeFantasia:
-      empresa.nome_fantasia ||
-      empresa.nomeFantasia ||
-      ''
 
+if(!resposta.ok){
 
-    }
 
+return {
 
+sucesso:false,
 
-  } catch(error:any){
+razaoSocial:'',
 
+nomeFantasia:'',
 
-    console.error(
-      '[ERRO CONSULTA CNPJ]',
-      error
-    )
+cnpj:cnpjLimpo,
 
+erro:`Snoop HTTP ${resposta.status}`
 
-    return {
+}
 
-      sucesso:false,
 
-      razaoSocial:'',
+}
 
-      nomeFantasia:'',
 
-      cnpj,
 
-      erro:error.message
+const empresa =
+dados.data || dados
 
-    }
 
-  }
+
+return {
+
+
+sucesso:true,
+
+
+cnpj:
+empresa.cnpj || cnpjLimpo,
+
+
+razaoSocial:
+empresa.razao_social ||
+empresa.razaoSocial ||
+'',
+
+
+nomeFantasia:
+empresa.nome_fantasia ||
+empresa.nomeFantasia ||
+''
+
+
+}
+
+
+
+}catch(error:any){
+
+
+console.error(
+'[ERRO CONSULTA CNPJ]',
+error
+)
+
+
+return {
+
+sucesso:false,
+
+razaoSocial:'',
+
+nomeFantasia:'',
+
+cnpj,
+
+erro:error.message
+
+}
+
+
+}
+
 
 }
