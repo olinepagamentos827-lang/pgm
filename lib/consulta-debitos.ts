@@ -34,7 +34,6 @@ const MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ]
 
-// CORREÇÃO DEFINTIVA: Array de escopo populado explicitamente para a fila não quebrar
 const ANOS_MEI_PADRAO = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
 async function consultarAno(
@@ -52,7 +51,7 @@ async function consultarAno(
 
   const resposta = await fetch(url, {
     cache: 'no-store',
-    signal: AbortSignal.timeout(25000),
+    signal: AbortSignal.timeout(35000), // Aumentado ligeiramente para segurar pacotes truncados pesados
     headers: {
       'Accept': 'application/json, text/plain, */*',
       'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -72,8 +71,33 @@ async function consultarAno(
     throw new Error(`HTTP ${resposta.status}`)
   }
 
-  const apiData = await resposta.json()
-  console.log('[DEBUG PAYLOAD]', JSON.stringify(apiData))
+  let texto = await resposta.text()
+  console.log('[DEBUG RAW TEXT]', texto.substring(0, 300))
+
+  // BLINDAGEM CONTRA TRUNCAÇÃO: Se o JSON vier cortado na marra pelo servidor, reconstrói o fechamento básico
+  if (texto.includes('"resumo-pa":') && !texto.endsWith(']}') && !texto.endsWith(']}]]}')) {
+    console.log('[AVISO INFRA] Payload cortado detectado. Aplicando fechamento de emergência.')
+    if (texto.includes('valor-principal-detalhamento')) {
+      texto = texto.substring(0, texto.lastIndexOf('{"pa"')) || texto;
+      // Garante a finalização do nó válido anterior
+      if (!texto.endsWith(']}')) texto += ']}]}'
+    }
+  }
+
+  let apiData: any
+  try {
+    apiData = JSON.parse(texto)
+  } catch (parseError) {
+    console.error('[ERRO PARSE] Resposta corrompida enviada pelo órgão:', texto.substring(texto.length - 100))
+    // Retorna fallback limpo do ano travado para o select não sumir na tela por erro de infra
+    return {
+      cnpj,
+      nome,
+      ano,
+      anosDisponiveis: [{ ano, bloqueado: true, motivo: 'Instabilidade no retorno dos dados.' }],
+      periodos: []
+    }
+  }
 
   let nomeFinal = apiData.nomeContribuinte || apiData.nome || nome || ''
 
@@ -86,47 +110,29 @@ async function consultarAno(
     }
   }
 
-  /* 
-    TRATAMENTO DE RETORNOS DE ERRO/AVISO DO SERPRO
-  */
   if (apiData['mensagem-erro'] || apiData.mensagemErro) {
     const erroObj = apiData['mensagem-erro'] || apiData.mensagemErro
-    console.log('[DEBUG SERPRO MSG]', erroObj)
     const textoErro = erroObj.texto || ''
 
-    // Se exige a DASN anterior, a empresa existia e possui débitos. FICA TOTALMENTE CLICÁVEL
     if (textoErro.includes('Antes de prosseguir') || textoErro.includes('DASN-Simei')) {
       return {
         cnpj,
         nome: nomeFinal,
         ano,
-        anosDisponiveis: [
-          {
-            ano,
-            bloqueado: false
-          }
-        ],
+        anosDisponiveis: [{ ano, bloqueado: false }],
         periodos: []
       }
     }
 
-    // Se o erro indicar que a empresa não era optante real ou está baixada (como 2021, 2022 ou 2026)
     return {
       cnpj,
       nome: nomeFinal,
       ano,
-      anosDisponiveis: [
-        {
-          ano,
-          bloqueado: true,
-          motivo: 'Não optante'
-        }
-      ],
+      anosDisponiveis: [{ ano, bloqueado: true, motivo: 'Não optante' }],
       periodos: []
     }
   }
 
-  /* PADRÃO NOVO SERPRO */
   const listaResumo = apiData['resumo-pa'] || apiData.resumoPa || []
 
   if (Array.isArray(listaResumo)) {
@@ -172,58 +178,17 @@ async function consultarAno(
       cnpj,
       nome: nomeFinal,
       ano,
-      anosDisponiveis: [
-        {
-          ano,
-          bloqueado: false
-        }
-      ],
+      anosDisponiveis: [{ ano, bloqueado: false }],
       periodos
     }
   }
-
-  /* PADRÃO ANTIGO SERPRO */
-  const lista = apiData.listaSituacaoApuracaoMei || apiData.situacoesApuracaoInssMei || apiData.situacaoApuracaoInssMei || []
-  const periodos: PeriodoApuracao[] = Array.isArray(lista)
-    ? lista.map((item: any) => {
-        const detalhe = item['resumo-pa-detalhamento']?.[0] || {}
-        const valores = detalhe['valores-pa'] || {}
-        const datas = detalhe['datas-pa'] || {}
-
-        const pa = String(item.pa || '')
-        let mes = Number(pa.substring(4, 6)) - 1
-        if (Number.isNaN(mes) || mes < 0 || mes > 11) mes = 0
-
-        const principal = Number(valores['valor-principal']) || 0
-        const multa = Number(valores['valor-multa']) || 0
-        const juros = Number(valores['valor-juros']) || 0
-
-        return {
-          id: `${ano}-${String(mes + 1).padStart(2, '0')}`,
-          rotulo: `${MESES[mes]}/${ano}`,
-          apurado: (principal + multa + juros) > 0,
-          beneficioInss: false,
-          principal,
-          multa,
-          juros,
-          total: principal + multa + juros,
-          dataVencimento: datas['data-vencimento'] || '-',
-          dataAcolhimento: datas['data-acolhimento'] || '-'
-        }
-      })
-    : []
 
   return {
     cnpj,
     nome: nomeFinal,
     ano,
-    anosDisponiveis: [
-      {
-        ano,
-        bloqueado: false
-      }
-    ],
-    periodos
+    anosDisponiveis: [{ ano, bloqueado: false }],
+    periodos: []
   }
 }
 
@@ -235,9 +200,7 @@ export async function consultarDebitos(
 
   try {
     const dadosEmpresa = await consultarCnpj(cnpj)
-    if (dadosEmpresa.razaoSocial) {
-      nomeContribuinte = dadosEmpresa.razaoSocial
-    }
+    if (dadosEmpresa.razaoSocial) nomeContribuinte = dadosEmpresa.razaoSocial
   } catch (err) {
     console.log('[DEBUG NOME CATCH]', err)
   }
@@ -296,7 +259,6 @@ export async function consultarDebitos(
 
   todosPeriodos.sort((a, b) => b.id.localeCompare(a.id))
 
-  // Envia a lista ordenada de forma crescente para o front-end (2020 a 2026)
   const anosOrdenadosCrescente = [...ANOS_MEI_PADRAO].sort((a, b) => a - b)
 
   return {
