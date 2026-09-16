@@ -73,7 +73,7 @@ export function EmitirGuia() {
   }
 
   function toggleTodos() {
-    if (todosAcupadosSelecionados) {
+    if (todosApuradosSelecionados) {
       setSelecionados(new Set())
     } else {
       setSelecionados(new Set(periodos.filter((p) => p.apurado).map((p) => p.id)))
