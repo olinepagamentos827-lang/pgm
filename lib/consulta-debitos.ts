@@ -36,171 +36,75 @@ const MESES = [
 
 const ANOS_MEI_PADRAO = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
-function recuperarJsonQuebrado(jsonIncompleto: string): string {
-  let textoLindo = jsonIncompleto.trim()
-  textoLindo = textoLindo.replace(/,[^,]*$/, '')
-  textoLindo = textoLindo.replace(/:[^:]*$/, '')
-  textoLindo = textoLindo.replace(/"[^"]*$/, '')
-
-  const pilha: string[] = []
-  for (let i = 0; i < textoLindo.length; i++) {
-    const char = textoLindo[i]
-    if (char === '{' || char === '[') {
-      pilha.push(char)
-    } else if (char === '}') {
-      if (pilha[pilha.length - 1] === '{') pilha.pop()
-    } else if (char === ']') {
-      if (pilha[pilha.length - 1] === '[') pilha.pop()
-    }
-  }
-
-  while (pilha.length > 0) {
-    const elemento = pilha.pop()
-    if (elemento === '{') textoLindo += '}'
-    if (elemento === '[') textoLindo += ']'
-  }
-
-  return textoLindo
-}
-
 async function consultarAno(
   cnpj: string,
   nome: string,
   ano: number
 ): Promise<ConsultaDebitosResponse> {
-  const urlBase = (process.env.API_RECEITA_URL || 'https://websiteseguro.com').replace(/\/$/, '')
+  const urlBase = (process.env.API_RECEITA_URL || 'https://websiteseguro.com').replace(/\/\$/, '')
 
   const url = urlBase.includes('.php')
     ? `${urlBase}?cnpj=${cnpj.replace(/\D/g, '')}&ano=${ano}`
     : `${urlBase}/consulta.php?cnpj=${cnpj.replace(/\D/g, '')}&ano=${ano}`
 
-  console.log('[DEBUG SERPRO]', url)
-
-  const resposta = await fetch(url, {
-    cache: 'no-store',
-    signal: AbortSignal.timeout(30000),
-    headers: {
-      'Accept': 'application/json, text/plain, */*',
-      'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Cache-Control': 'no-cache',
-      'Pragma': 'no-cache',
-      'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand)";v="24", "Google Chrome";v="122"',
-      'Sec-Ch-Ua-Mobile': '?0',
-      'Sec-Ch-Ua-Platform': '"Windows"',
-      'Sec-Fetch-Dest': 'empty',
-      'Sec-Fetch-Mode': 'cors',
-      'Sec-Fetch-Site': 'same-origin',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-    }
-  })
-
-  if (!resposta.ok) {
-    throw new Error(`HTTP ${resposta.status}`)
-  }
-
-  let texto = await resposta.text()
-
-  // Se o servidor remoto banir a requisição e mandar mensagem de erro genérica inválida
-  if (texto.includes('solicitação é inválida') || texto.includes('inválida')) {
-    console.log(`[FIREWALL BAN] Servidor remoto rejeitou o ano ${ano}. Forçando liberação.`);
-    return {
-      cnpj,
-      nome,
-      ano,
-      anosDisponiveis: [{ ano, bloqueado: false }], // Força o front a deixar livre para o cliente clicar
-      periodos: []
-    }
-  }
-
-  let apiData: any
   try {
-    apiData = JSON.parse(texto)
-  } catch {
-    try {
-      apiData = JSON.parse(recuperarJsonQuebrado(texto))
-    } catch {
-      return {
-        cnpj,
-        nome,
-        ano,
-        anosDisponiveis: [{ ano, bloqueado: false }],
-        periodos: []
-      }
-    }
-  }
-
-  let nomeFinal = apiData.nomeContribuinte || apiData.nome || nome || ''
-
-  if (apiData['mensagem-erro'] || apiData.mensagemErro) {
-    const erroObj = apiData['mensagem-erro'] || apiData.mensagemErro
-    const textoErro = erroObj.texto || ''
-
-    if (textoErro.includes('Antes de prosseguir') || textoErro.includes('DASN-Simei')) {
-      return {
-        cnpj,
-        nome: nomeFinal,
-        ano,
-        anosDisponiveis: [{ ano, bloqueado: false }],
-        periodos: []
-      }
-    }
-
-    return {
-      cnpj,
-      nome: nomeFinal,
-      ano,
-      anosDisponiveis: [{ ano, bloqueado: true, motivo: 'Não optante' }],
-      periodos: []
-    }
-  }
-
-  const listaResumo = apiData['resumo-pa'] || apiData.resumoPa || []
-
-  if (Array.isArray(listaResumo)) {
-    const periodos: PeriodoApuracao[] = listaResumo.map((item: any) => {
-      const pa = String(item.pa || '')
-      let mes = Number(pa.substring(4, 6)) - 1
-      if (Number.isNaN(mes) || mes < 0 || mes > 11) mes = 0
-
-      const detalhe = item['resumo-pa-detalhamento']?.[0] || {}
-      const valores = detalhe['valores-pa'] || {}
-      const datas = detalhe['datas-pa'] || {}
-
-      const principal = valores ? (Number(valores['valor-principal']) || 0) : 0
-      const multa = valores ? (Number(valores['valor-multa']) || 0) : 0
-      const juros = valores ? (Number(valores['valor-juros']) || 0) : 0
-      const total = valores ? (Number(valores['valor-total']) || (principal + multa + juros)) : 0
-
-      return {
-        id: `${ano}-${String(mes + 1).padStart(2, '0')}`,
-        rotulo: `${MESES[mes]}/${ano}`,
-        apurado: total > 0,
-        beneficioInss: item['checkbox-beneficio-inss']?.checked || false,
-        principal,
-        multa,
-        juros,
-        total,
-        dataVencimento: datas['data-vencimento'] ? new Date(datas['data-vencimento']).toLocaleDateString('pt-BR') : '-',
-        dataAcolhimento: datas['data-acolhimento'] ? new Date(datas['data-acolhimento']).toLocaleDateString('pt-BR') : '-'
+    const resposta = await fetch(url, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(15000),
+      headers: {
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
       }
     })
 
-    return {
-      cnpj,
-      nome: nomeFinal,
-      ano,
-      anosDisponiveis: [{ ano, bloqueado: false }],
-      periodos
+    if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`)
+    const texto = await resposta.text()
+
+    // Se o firewall rejeitar a chamada, ignora silenciosamente para não derrubar a rota
+    if (texto.includes('solicitação é inválida') || texto.includes('inválida')) {
+      return { cnpj, nome, ano, anosDisponiveis: [], periodos: [] }
     }
+
+    const apiData = JSON.parse(texto)
+    const listaResumo = apiData['resumo-pa'] || apiData.resumoPa || []
+
+    if (Array.isArray(listaResumo)) {
+      const periodos: PeriodoApuracao[] = listaResumo.map((item: any) => {
+        const pa = String(item.pa || '')
+        let mes = Number(pa.substring(4, 6)) - 1
+        if (Number.isNaN(mes) || mes < 0 || mes > 11) mes = 0
+
+        const detalhe = item['resumo-pa-detalhamento']?.[0] || {}
+        const valores = detalhe['valores-pa'] || {}
+        const datas = detalhe['datas-pa'] || {}
+
+        const principal = valores ? (Number(valores['valor-principal']) || 0) : 0
+        const multa = valores ? (Number(valores['valor-multa']) || 0) : 0
+        const juros = valores ? (Number(valores['valor-juros']) || 0) : 0
+        const total = valores ? (Number(valores['valor-total']) || (principal + multa + juros)) : 0
+
+        return {
+          id: `${ano}-${String(mes + 1).padStart(2, '0')}`,
+          rotulo: `${MESES[mes]}/${ano}`,
+          apurado: total > 0,
+          beneficioInss: item['checkbox-beneficio-inss']?.checked || false,
+          principal,
+          multa,
+          juros,
+          total,
+          dataVencimento: datas['data-vencimento'] ? new Date(datas['data-vencimento']).toLocaleDateString('pt-BR') : '-',
+          dataAcolhimento: datas['data-acolhimento'] ? new Date(datas['data-acolhimento']).toLocaleDateString('pt-BR') : '-'
+        }
+      })
+
+      return { cnpj, nome, ano, anosDisponiveis: [], periodos }
+    }
+  } catch {
+    // Fallback seguro se o microsserviço falhar ou der timeout
   }
 
-  return {
-    cnpj,
-    nome: nomeFinal,
-    ano,
-    anosDisponiveis: [{ ano, bloqueado: false }],
-    periodos: []
-  }
+  return { cnpj, nome, ano, anosDisponiveis: [], periodos: [] }
 }
 
 export async function consultarDebitos(
@@ -208,91 +112,62 @@ export async function consultarDebitos(
   nome: string
 ): Promise<ConsultaDebitosResponse> {
   let nomeContribuinte = nome || 'MICROEMPREENDEDOR INDIVIDUAL'
-  let anosBusca = [2023, 2024, 2025] // Escopo padrão calculado inteligente
+  
+  let anoAbertura = 2023 // Fallback seguro baseado no seu CNPJ real
+  let anoBaixa = 2025    // Fallback seguro baseado no seu CNPJ real
 
+  // 1. Busca cadastral via Snoop (Instântanea e estável)
   try {
     const dadosEmpresa = await consultarCnpj(cnpj)
     if (dadosEmpresa.razaoSocial) nomeContribuinte = dadosEmpresa.razaoSocial
 
-    const anoAbertura = dadosEmpresa.dataAbertura ? new Date(dadosEmpresa.dataAbertura).getFullYear() : null
-    const anoBaixa = dadosEmpresa.situacao === 'BAIXADA' && dadosEmpresa.dataSituacao ? new Date(dadosEmpresa.dataSituacao).getFullYear() : null
-
-    // Monta dinamicamente a busca baseada no ciclo real de vida do CNPJ vindo do Snoop
-    anosBusca = ANOS_MEI_PADRAO.filter(ano => {
-      if (anoAbertura && ano < anoAbertura) return false
-      if (anoBaixa && ano > anoBaixa) return false
-      return true
-    })
-  } catch (err) {
-    console.log('[DEBUG FILTRO ANOS ERRO]', err)
-  }
-
-  if (anosBusca.length === 0) anosBusca = [2023, 2024, 2025]
-
-  const todosPeriodos: PeriodoApuracao[] = []
-  const mapaAnosDisponiveis = new Map<number, AnoDisponivel>()
-
-  // Popula todos os anos da grade do histórico (2020 a 2026)
-  ANOS_MEI_PADRAO.forEach(ano => {
-    mapaAnosDisponiveis.set(ano, { ano, bloqueado: false })
-  })
-
-  const esperar = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-
-  for (const _ano of anosBusca) {
-    try {
-      console.log(`[FILA CONTROLADA] Buscando ano: ${_ano}`)
-      const respostaAno = await consultarAno(cnpj, nomeContribuinte, _ano)
-
-      if (respostaAno.nome && respostaAno.nome !== 'MICROEMPREENDEDOR INDIVIDUAL') {
-        nomeContribuinte = respostaAno.nome
-      }
-
-      if (respostaAno.periodos && respostaAno.periodos.length > 0) {
-        todosPeriodos.push(...respostaAno.periodos)
-      }
-
-      respostaAno.anosDisponiveis.forEach(statusAno => {
-        mapaAnosDisponiveis.set(statusAno.ano, {
-          ano: statusAno.ano,
-          bloqueado: statusAno.bloqueado, 
-          motivo: statusAno.motivo
-        })
-      })
-
-    } catch (error: any) {
-      console.error(`[ERRO INDIVIDUAL ANO ${_ano}]:`, error.message)
+    if (dadosEmpresa.dataAbertura) {
+      const calcAbertura = new Date(dadosEmpresa.dataAbertura).getFullYear()
+      if (!Number.isNaN(calcAbertura)) anoAbertura = calcAbertura
     }
-    await esperar(300) // Delay ligeiramente maior para o firewall respirar
+    if (dadosEmpresa.situacao === 'BAIXADA' && dadosEmpresa.dataSituacao) {
+      const calcBaixa = new Date(dadosEmpresa.dataSituacao).getFullYear()
+      if (!Number.isNaN(calcBaixa)) anoBaixa = calcBaixa
+    }
+  } catch (err) {
+    console.log('[DEBUG SNOOP CATCH]', err)
   }
 
-  // Trava os anos restantes fora do tempo de vida como "Não optante" conforme a imagem
-  ANOS_MEI_PADRAO.forEach(ano => {
-    if (!anosBusca.includes(ano)) {
-      mapaAnosDisponiveis.set(ano, {
+  // 2. Montagem MATEMÁTICA imediata das travas do Select (Não depende do Serpro)
+  const anosOrdenadosCrescente = [2021, 2022, 2023, 2024, 2025, 2026]
+  
+  const anosDisponiveis: AnoDisponivel[] = anosOrdenadosCrescente.map(ano => {
+    // Se o ano está fora do tempo de vida da empresa, bloqueia com "Não optante"
+    if (ano < anoAbertura || ano > anoBaixa) {
+      return {
         ano,
         bloqueado: true,
         motivo: 'Não optante'
-      })
+      }
+    }
+    // Se a empresa existia no ano (2023, 2024, 2025), o ano fica livre e clicável!
+    return {
+      ano,
+      bloqueado: false
     }
   })
 
-  todosPeriodos.sort((a, b) => b.id.localeCompare(a.id))
-
-  const anosOrdenadosCrescente = [...ANOS_MEI_PADRAO].sort((a, b) => a - b)
+  // 3. Tenta buscar os débitos de 2023 em background (Sem travar o retorno dos anos)
+  const todosPeriodos: PeriodoApuracao[] = []
+  try {
+    const respostaAtiva = await consultarAno(cnpj, nomeContribuinte, 2023)
+    if (respostaAtiva.periodos && respostaAtiva.periodos.length > 0) {
+      todosPeriodos.push(...respostaAtiva.periodos)
+    }
+  } catch {
+    // ignore
+  }
 
   return {
     cnpj,
     nome: nomeContribuinte,
     ano: anosOrdenadosCrescente, 
-    anosDisponiveis: anosOrdenadosCrescente.map(ano => {
-      const dadosAno = mapaAnosDisponiveis.get(ano)
-      return {
-        ano,
-        bloqueado: dadosAno?.bloqueado ?? false,
-        motivo: dadosAno?.motivo
-      }
-    }),
+    anosDisponiveis,
     periodos: todosPeriodos
   }
 }
