@@ -9,7 +9,7 @@ import {
 import { useMei } from '@/lib/mei-context'
 import { PaymentModal, type PagamentoInfo } from '@/components/payment-modal'
 
-const ANOS = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
+
 
 const fetcher = async (url: string) => {
 
@@ -182,12 +182,16 @@ export function EmitirGuia() {
             "
           >
             <option value="">&nbsp;</option>
-            {ANOS.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
+            {data?.anosDisponiveis?.map((item)=>(
+  <option
+    key={item.ano}
+    value={item.ano}
+    disabled={item.bloqueado}
+  >
+    {item.ano}
+    {item.bloqueado ? ' Não optante' : ''}
+  </option>
+))}
 
           <button
             type="button"
