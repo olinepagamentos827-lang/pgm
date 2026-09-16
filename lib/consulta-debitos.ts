@@ -242,34 +242,82 @@ if(isServer){
         }
 
 
+// CNPJ baixado - tenta consultar anos anteriores
 
-        // CNPJ baixado
+if(codigo === '23033'){
 
-        if(codigo === '23033'){
-
-
-
-          return {
-
-            cnpj,
-
-            nome:nomeFinal,
-
-            ano,
-
-            anosDisponiveis:
-            ANOS_MEI_PADRAO,
-
-            periodos:[]
-
-          }
+  console.log(
+    '[DEBUG] CNPJ baixado. Tentando anos anteriores...'
+  )
 
 
-        }
+  for (const anoAnterior of ANOS_MEI_PADRAO) {
 
+    if (anoAnterior === ano) continue
+
+
+    try {
+
+      console.log(
+        '[DEBUG] Tentando ano:',
+        anoAnterior
+      )
+
+
+      const novaConsulta =
+        await consultarDebitos(
+          cnpj,
+          nomeFinal,
+          anoAnterior
+        )
+
+
+      if (
+        novaConsulta.periodos &&
+        novaConsulta.periodos.length > 0
+      ) {
+
+        console.log(
+          '[DEBUG] Débitos encontrados no ano:',
+          anoAnterior
+        )
+
+
+        return novaConsulta
 
       }
 
+
+    } catch(e){
+
+      console.log(
+        '[DEBUG] Falhou ano:',
+        anoAnterior,
+        e
+      )
+
+    }
+
+  }
+
+
+  return {
+
+    cnpj,
+
+    nome:nomeFinal,
+
+    ano,
+
+    anosDisponiveis:
+      ANOS_MEI_PADRAO,
+
+    periodos:[]
+
+  }
+
+
+}
 
 
 
