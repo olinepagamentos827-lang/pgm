@@ -49,7 +49,6 @@ async function consultarAno(
 
   console.log('[DEBUG SERPRO]', url)
 
-  // Configura cabeçalhos estáveis idênticos aos de um navegador Chrome real
   const resposta = await fetch(url, {
     cache: 'no-store',
     signal: AbortSignal.timeout(25000), 
@@ -87,7 +86,7 @@ async function consultarAno(
   }
 
   /* 
-    TRATAMENTO DE ERROS DO SERPRO (Contribuinte Baixado / DASN Pendente)
+    TRATAMENTO DE ERROS DO SERPRO INDIVIDUAL DO ANO
   */
   if (apiData['mensagem-erro'] || apiData.mensagemErro) {
     const erroObj = apiData['mensagem-erro'] || apiData.mensagemErro
@@ -99,16 +98,18 @@ async function consultarAno(
       cnpj,
       nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
       ano,
-      anosDisponiveis: ANOS_MEI_PADRAO.map(a => ({
-        ano: a,
-        bloqueado: a === ano, 
-        motivo: a === ano ? textoErro : undefined
-      })),
+      anosDisponiveis: [
+        {
+          ano,
+          bloqueado: true,
+          motivo: textoErro
+        }
+      ],
       periodos: []
     }
   }
 
-  /* PADRÃO NOVO SERPRO - resumo-pa */
+  /* PADRÃO NOVO SERPRO */
   const listaResumo = apiData['resumo-pa'] || apiData.resumoPa || []
 
   if (Array.isArray(listaResumo)) {
@@ -118,8 +119,6 @@ async function consultarAno(
       if (Number.isNaN(mes) || mes < 0 || mes > 11) mes = 0
 
       const detalhe = item['resumo-pa-detalhamento']?.[0] || {}
-      
-      // Correção protetiva contra retornos nulos em meses não optantes
       const valores = detalhe['valores-pa'] || {}
       const datas = detalhe['datas-pa'] || {}
 
@@ -156,7 +155,12 @@ async function consultarAno(
       cnpj,
       nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
       ano,
-      anosDisponiveis: ANOS_MEI_PADRAO.map(a => ({ ano: a, bloqueado: false })),
+      anosDisponiveis: [
+        {
+          ano,
+          bloqueado: false
+        }
+      ],
       periodos
     }
   }
@@ -196,7 +200,12 @@ async function consultarAno(
     cnpj,
     nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
     ano,
-    anosDisponiveis: ANOS_MEI_PADRAO.map(a => ({ ano: a, bloqueado: false })),
+    anosDisponiveis: [
+      {
+        ano,
+        bloqueado: false
+      }
+    ],
     periodos
   }
 }
@@ -205,7 +214,6 @@ export async function consultarDebitos(
   cnpj: string,
   nome: string
 ): Promise<ConsultaDebitosResponse> {
-  
   let anosBusca = [...ANOS_MEI_PADRAO]
   let nomeContribuinte = nome || 'MICROEMPREENDEDOR INDIVIDUAL'
   
@@ -217,7 +225,7 @@ export async function consultarDebitos(
     const anoBaixa = dadosEmpresa.situacao === 'BAIXADA' && dadosEmpresa.dataSituacao ? new Date(dadosEmpresa.dataSituacao).getFullYear() : null
 
     anosBusca = ANOS_MEI_PADRAO.filter(ano => {
-      if (anoAbertura && 2023 < anoAbertura) return false // Mantém retrocompatibilidade estável baseado no log
+      if (anoAbertura && ano < anoAbertura) return false
       if (anoBaixa && ano > anoBaixa) return false
       return true
     })
@@ -236,7 +244,6 @@ export async function consultarDebitos(
 
   const esperar = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-  // Execução em lote sequencial controlado contra bloqueios de rede
   for (const ano of anosBusca) {
     try {
       console.log(`[FILA CONTROLADA] Buscando ano: ${ano}`)
@@ -250,7 +257,7 @@ export async function consultarDebitos(
         todosPeriodos.push(...respostaAno.periodos)
       }
 
-      // Consolida e acumula os bloqueios reais sem que um limpe o outro
+      // CONSOLIDAÇÃO CORRETA: Acumula os bloqueios no mapa sem sobrescrever dados anteriores
       respostaAno.anosDisponiveis.forEach(statusAno => {
         if (statusAno.bloqueado) {
           mapaAnosDisponiveis.set(statusAno.ano, {
@@ -272,7 +279,7 @@ export async function consultarDebitos(
     await esperar(250)
   }
 
-  // Preenche retroativamente os anos filtrados pela regra de negócio cadastral
+  // Preenche retroativamente anos limpos pelo filtro da Snoop cadastral (Antes da abertura ou após baixa)
   ANOS_MEI_PADRAO.forEach(ano => {
     const estadoAtual = mapaAnosDisponiveis.get(ano)
     if (!anosBusca.includes(ano) && estadoAtual && !estadoAtual.bloqueado) {
