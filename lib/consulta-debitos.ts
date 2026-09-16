@@ -34,7 +34,7 @@ const MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ]
 
-const ANOS_MEI_PADRAO = [2026, 2025, 2024, 2023, 2022, 2021]
+const ANOS_MEI_PADRAO = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
 async function consultarAno(
   cnpj: string,
@@ -86,39 +86,39 @@ async function consultarAno(
   }
 
   /* 
-    TRATAMENTO DE RETORNOS DE ERRO/AVISO DO SERPRO
+    TRATAMENTO DE ERROS DO SERPRO INDIVIDUAL DO ANO
   */
   if (apiData['mensagem-erro'] || apiData.mensagemErro) {
     const erroObj = apiData['mensagem-erro'] || apiData.mensagemErro
     console.log('[DEBUG SERPRO MSG]', erroObj)
     const textoErro = erroObj.texto || ''
 
-    // CRITERIO CORRIGIDO: Se exige a DASN, a empresa existia e há ações pendentes.
-    // PORTANTO, O ANO DEVE FICAR 100% LIBERADO PARA CLIQUE E GERAÇÃO DE DEBITOS
+    // SE PEDE DASN-SIMEI OU ANTERIOR, O MEI EXISTIA. DEVE FICAR CLICÁVEL (bloqueado: false)
     if (textoErro.includes('Antes de prosseguir') || textoErro.includes('DASN-Simei')) {
       return {
         cnpj,
-        nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
+        nome: nomeFinal,
         ano,
         anosDisponiveis: [
           {
             ano,
-            bloqueado: false // 👈 TOTALMENTE CLICÁVEL
+            bloqueado: false,
+            motivo: undefined
           }
         ],
         periodos: []
       }
     }
 
-    // Se o erro indicar que a empresa não era optante real ou está baixada no período
+    // Se cair aqui, são os erros de fato que não pertencem ao tempo de vida (Não optante ou decadência)
     return {
       cnpj,
-      nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
+      nome: nomeFinal,
       ano,
       anosDisponiveis: [
         {
           ano,
-          bloqueado: true, // 👈 TRAVADO NO SELECT
+          bloqueado: true,
           motivo: 'Não optante'
         }
       ],
@@ -170,12 +170,12 @@ async function consultarAno(
 
     return {
       cnpj,
-      nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
+      nome: nomeFinal,
       ano,
       anosDisponiveis: [
         {
           ano,
-          bloqueado: false // Clicável
+          bloqueado: false
         }
       ],
       periodos
@@ -215,7 +215,7 @@ async function consultarAno(
 
   return {
     cnpj,
-    nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
+    nome: nomeFinal,
     ano,
     anosDisponiveis: [
       {
@@ -233,18 +233,29 @@ export async function consultarDebitos(
 ): Promise<ConsultaDebitosResponse> {
   let nomeContribuinte = nome || 'MICROEMPREENDEDOR INDIVIDUAL'
 
+  // Garante a busca cadastral da Snoop antes do loop para recuperar o nome real da empresa
+  try {
+    const dadosEmpresa = await consultarCnpj(cnpj)
+    if (dadosEmpresa.razaoSocial) {
+      nomeContribuinte = dadosEmpresa.razaoSocial
+    }
+  } catch (err) {
+    console.log('[DEBUG NOME CATCH]', err)
+  }
+
   const todosPeriodos: PeriodoApuracao[] = []
   const mapaAnosDisponiveis = new Map<number, AnoDisponivel>()
 
-  // Organiza o escopo de 2021 a 2026 de forma crescente igual ao layout do anexo
   const escopoAnos = [2021, 2022, 2023, 2024, 2025, 2026]
 
+  // Seta o estado inicial estável para todos os anos do escopo
   escopoAnos.forEach(ano => {
     mapaAnosDisponiveis.set(ano, { ano, bloqueado: false })
   })
 
   const esperar = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
+  // Varredura limpa termo a termo no Serpro
   for (const ano of escopoAnos) {
     try {
       console.log(`[FILA CONTROLADA] Buscando ano: ${ano}`)
@@ -258,7 +269,7 @@ export async function consultarDebitos(
         todosPeriodos.push(...respostaAno.periodos)
       }
 
-      // Sincroniza a resposta real do validador mantendo bloqueios apenas nos não optantes reais
+      // Copia a decisão individual gerada por cada ano consultado
       respostaAno.anosDisponiveis.forEach(statusAno => {
         mapaAnosDisponiveis.set(statusAno.ano, {
           ano: statusAno.ano,
