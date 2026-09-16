@@ -13,12 +13,19 @@ export interface PeriodoApuracao {
   dataAcolhimento: string | null
 }
 
+export interface AnoDisponivel {
+  ano:number
+  bloqueado:boolean
+  motivo?:string
+}
+
+
 export interface ConsultaDebitosResponse {
-  cnpj: string
-  nome: string
-  ano: number
-  anosDisponiveis: number[]
-  periodos: PeriodoApuracao[]
+  cnpj:string
+  nome:string
+  ano:number
+  anosDisponiveis:AnoDisponivel[]
+  periodos:PeriodoApuracao[]
 }
 
 const MESES = [
