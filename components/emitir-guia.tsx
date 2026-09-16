@@ -36,11 +36,12 @@ export function EmitirGuia() {
     ? `/api/debitos?cnpj=${encodeURIComponent(cnpj)}&nome=${encodeURIComponent(nome)}`
     : null
 
-  const { data, isLoading, mutate } = useSWR(key, fetcher, {
+  const { data, isLoading } = useSWR(key, fetcher, {
     revalidateOnFocus: false,
+    revalidateOnMount: true, // Força a busca dos dados assim que a tela abre
   })
 
-    const periodos = useMemo(() => {
+  const periodos = useMemo(() => {
     if (!data?.periodos || !anoConsultado) return []
     return data.periodos.filter((p) => p.id.startsWith(`${anoConsultado}-`))
   }, [data?.periodos, anoConsultado])
@@ -55,7 +56,6 @@ export function EmitirGuia() {
       .filter((p) => selecionados.has(p.id))
       .reduce((acc, p) => acc + (p.total ?? 0), 0)
   }, [periodos, selecionados])
-
 
   function handleConsultar() {
     if (!anoSelect) return
@@ -72,7 +72,7 @@ export function EmitirGuia() {
   }
 
   function toggleTodos() {
-    if (todosApuradosSelecionados) {
+    if (todosAcupadosSelecionados) {
       setSelecionados(new Set())
     } else {
       setSelecionados(new Set(periodos.filter((p) => p.apurado).map((p) => p.id)))
@@ -198,7 +198,6 @@ export function EmitirGuia() {
         {anoConsultado != null && (
           <div className="mx-8 mt-4 rounded-[4px] border border-[#dcdcdc] bg-white p-4 shadow-[0_4px_12px_rgba(0,0,0,0.40)]">
             
-            {/* TÍTULO DA SEÇÃO */}
             <div 
               className="
                 -mx-4 
@@ -282,7 +281,7 @@ export function EmitirGuia() {
                           text-[12px]
                           text-[#333333]
                           transition-colors
-                          ${selecionados.has(p.id) ? 'bg-[#fef8e8]' : 'bg-white hover:bg-[#f5f5f5]'}
+                          \${selecionados.has(p.id) ? 'bg-[#fef8e8]' : 'bg-white hover:bg-[#f5f5f5]'}
                         `}
                       >
                         <td className="px-1 py-0 text-center align-middle">
@@ -331,7 +330,6 @@ export function EmitirGuia() {
                 rounded-b-[4px]
               "
             >
-              {/* DATA DE PAGAMENTO */}
               <div className="mb-5 flex flex-wrap items-center justify-center gap-2 text-[#333333]">
                 <label htmlFor="dataPagamento" className="text-[13px] font-bold text-[#333333]">
                   Informe a data para pagamento do(s) DAS:
@@ -356,7 +354,6 @@ export function EmitirGuia() {
                 />
               </div>
 
-              {/* BOTÕES DE AÇÃO */}
               <div className="flex flex-wrap items-center justify-center gap-2">
                 <button
                   type="button"
