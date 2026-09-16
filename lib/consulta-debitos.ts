@@ -98,7 +98,8 @@ async function consultarAno(
   nome:string,
   ano:number,
   montarAnos:boolean = true
-)
+):Promise<ConsultaDebitosResponse> {
+
 
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 
