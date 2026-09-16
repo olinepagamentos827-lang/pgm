@@ -143,7 +143,8 @@ async function consultarAno(
   const lista = apiData.listaSituacaoApuracaoMei || apiData.situacoesApuracaoInssMei || apiData.situacaoApuracaoInssMei || []
   const periodos: PeriodoApuracao[] = Array.isArray(lista)
     ? lista.map((item: any) => {
-        const detalhe = item['resumo-pa-detalhamento']?..[0] || {}
+        const detalhe = item['resumo-pa-detalhamento']?.[0] || {}
+
         const valores = detalhe['valores-pa'] || {}
         const datas = detalhe['datas-pa'] || {}
 
