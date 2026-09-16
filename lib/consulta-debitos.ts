@@ -51,7 +51,7 @@ async function consultarAno(
 
   const resposta = await fetch(url, {
     cache: 'no-store',
-    signal: AbortSignal.timeout(25000), 
+    signal: AbortSignal.timeout(25000),
     headers: {
       'Accept': 'application/json, text/plain, */*',
       'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -60,9 +60,9 @@ async function consultarAno(
       'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand)";v="24", "Google Chrome";v="122"',
       'Sec-Ch-Ua-Mobile': '?0',
       'Sec-Ch-Ua-Platform': '"Windows"',
-      'Sec-Destination': 'empty',
-      'Sec-Mode': 'cors',
-      'Sec-Site': 'same-origin',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'same-origin',
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
     }
   })
@@ -216,13 +216,21 @@ export async function consultarDebitos(
 ): Promise<ConsultaDebitosResponse> {
   let anosBusca = [...ANOS_MEI_PADRAO]
   let nomeContribuinte = nome || 'MICROEMPREENDEDOR INDIVIDUAL'
-  
+
+  // Precisam existir fora do try, pois são usados depois no
+  // preenchimento retroativo dos anos bloqueados por filtro cadastral.
+  let anoAbertura: number | null = null
+  let anoBaixa: number | null = null
+
   try {
     const dadosEmpresa = await consultarCnpj(cnpj)
     if (dadosEmpresa.razaoSocial) nomeContribuinte = dadosEmpresa.razaoSocial
 
-    const anoAbertura = dadosEmpresa.dataAbertura ? new Date(dadosEmpresa.dataAbertura).getFullYear() : null
-    const anoBaixa = dadosEmpresa.situacao === 'BAIXADA' && dadosEmpresa.dataSituacao ? new Date(dadosEmpresa.dataSituacao).getFullYear() : null
+    const anoAberturaCalc = dadosEmpresa.dataAbertura ? new Date(dadosEmpresa.dataAbertura).getFullYear() : null
+    anoAbertura = anoAberturaCalc !== null && !Number.isNaN(anoAberturaCalc) ? anoAberturaCalc : null
+
+    const anoBaixaCalc = dadosEmpresa.situacao === 'BAIXADA' && dadosEmpresa.dataSituacao ? new Date(dadosEmpresa.dataSituacao).getFullYear() : null
+    anoBaixa = anoBaixaCalc !== null && !Number.isNaN(anoBaixaCalc) ? anoBaixaCalc : null
 
     anosBusca = ANOS_MEI_PADRAO.filter(ano => {
       if (anoAbertura && ano < anoAbertura) return false
@@ -279,14 +287,19 @@ export async function consultarDebitos(
     await esperar(250)
   }
 
-  // Preenche retroativamente anos limpos pelo filtro da Snoop cadastral (Antes da abertura ou após baixa)
+  // Preenche retroativamente os anos removidos pelo filtro cadastral
+  // (antes da abertura ou após a baixa), usando anoAbertura/anoBaixa reais.
   ANOS_MEI_PADRAO.forEach(ano => {
     const estadoAtual = mapaAnosDisponiveis.get(ano)
     if (!anosBusca.includes(ano) && estadoAtual && !estadoAtual.bloqueado) {
+      const motivo = anoBaixa !== null && ano > anoBaixa
+        ? 'Contribuinte baixado.'
+        : 'Contribuinte não optante.'
+
       mapaAnosDisponiveis.set(ano, {
         ano,
         bloqueado: true,
-        motivo: ano >= 2026 ? 'Contribuinte baixado.' : 'Contribuinte não optante.'
+        motivo
       })
     }
   })
