@@ -34,6 +34,7 @@ const MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ]
 
+// CORREÇÃO DEFINTIVA: Array de anos reestruturado e preenchido corretamente
 const ANOS_MEI_PADRAO = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
 async function consultarAno(
@@ -93,7 +94,7 @@ async function consultarAno(
     console.log('[DEBUG SERPRO MSG]', erroObj)
     const textoErro = erroObj.texto || ''
 
-    // Se exige a DASN anterior, a empresa existia no ano! DEVE FICAR SELECIONÁVEL E CLICÁVEL
+    // Se exige a DASN anterior, o MEI existia e possui débitos! FICA TOTALMENTE CLICÁVEL
     if (textoErro.includes('Antes de prosseguir') || textoErro.includes('DASN-Simei')) {
       return {
         cnpj,
@@ -244,21 +245,16 @@ export async function consultarDebitos(
   const todosPeriodos: PeriodoApuracao[] = []
   const mapaAnosDisponiveis = new Map<number, AnoDisponivel>()
 
-  const escopoAnos = [2021, 2022, 2023, 2024, 2025, 2026]
-
-  escopoAnos.forEach(ano => {
-    mapaAnosDisponiveis.set(ano, { 
-      ano, 
-      bloqueado: false 
-    })
+  ANOS_MEI_PADRAO.forEach(ano => {
+    mapaAnosDisponiveis.set(ano, { ano, bloqueado: false })
   })
 
   const esperar = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-  for (const ano of escopoAnos) {
+  for (const _ano of ANOS_MEI_PADRAO) {
     try {
-      console.log(`[FILA CONTROLADA] Buscando ano: ${ano}`)
-      const respostaAno = await consultarAno(cnpj, nomeContribuinte, ano)
+      console.log(`[FILA CONTROLADA] Buscando ano: ${_ano}`)
+      const respostaAno = await consultarAno(cnpj, nomeContribuinte, _ano)
 
       if (respostaAno.nome && respostaAno.nome !== 'MICROEMPREENDEDOR INDIVIDUAL') {
         nomeContribuinte = respostaAno.nome
@@ -277,18 +273,17 @@ export async function consultarDebitos(
       })
 
     } catch (error: any) {
-      console.error(`[ERRO INDIVIDUAL ANO ${ano}]:`, error.message)
-      mapaAnosDisponiveis.set(ano, { 
-        ano, 
+      console.error(`[ERRO INDIVIDUAL ANO ${_ano}]:`, error.message)
+      mapaAnosDisponiveis.set(_ano, { 
+        ano: _ano, 
         bloqueado: true, 
         motivo: 'Não optante' 
       })
     }
-    // CORRIGIDO: Voltou a ser esperar(250)!
     await esperar(250)
   }
 
-  escopoAnos.forEach(ano => {
+  ANOS_MEI_PADRAO.forEach(ano => {
     const dadosAno = mapaAnosDisponiveis.get(ano)
     if (dadosAno && dadosAno.bloqueado && !dadosAno.motivo) {
       mapaAnosDisponiveis.set(ano, {
@@ -301,7 +296,8 @@ export async function consultarDebitos(
 
   todosPeriodos.sort((a, b) => b.id.localeCompare(a.id))
 
-  const anosOrdenadosCrescente = [2021, 2022, 2023, 2024, 2025, 2026]
+  // Envia a lista ordenada de forma crescente para o front-end (2020 a 2026)
+  const anosOrdenadosCrescente = [...ANOS_MEI_PADRAO].sort((a, b) => a - b)
 
   return {
     cnpj,
