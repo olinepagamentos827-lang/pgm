@@ -129,50 +129,51 @@ async function consultarAno(
 
 
   // ==============================
-  // TRATAMENTO DE ERROS SERPRO
-  // ==============================
+// TRATAMENTO DE ERROS SERPRO
+// ==============================
 
-  if(apiData['mensagem-erro']){
-
-
-    const codigo =
-      String(
-        apiData['mensagem-erro'].codigo || ''
-      )
+if(apiData['mensagem-erro']){
 
 
-    console.log(
-      '[DEBUG SERPRO ERRO]',
-      codigo,
-      apiData['mensagem-erro'].texto
+  const codigo =
+    String(
+      apiData['mensagem-erro'].codigo || ''
     )
 
 
+  console.log(
+    '[DEBUG SERPRO ERRO]',
+    codigo,
+    apiData['mensagem-erro'].texto
+  )
 
-    return {
-      cnpj,
-      nome:
-        nomeFinal ||
-        'MICROEMPREENDEDOR INDIVIDUAL',
-      ano,
-      anosDisponiveis:
-        ANOS_MEI_PADRAO,
-      periodos:[]
-    }
+
+  return {
+    cnpj,
+
+    nome:
+      nomeFinal ||
+      'MICROEMPREENDEDOR INDIVIDUAL',
+
+    ano,
+
+    anosDisponiveis:
+      ANOS_MEI_PADRAO,
+
+    periodos:[]
 
   }
 
-
-
+}
   // ==============================
   // NOVO PADRÃO SERPRO
   // resumo-pa
   // ==============================
 
-
-  const listaResumo =
-    apiData['resumo-pa']
-
+const listaResumo =
+    apiData['resumo-pa'] ||
+    apiData['resumoPa'] ||
+    []
 
 
   if(
@@ -248,8 +249,10 @@ async function consultarAno(
             `${MESES[mes]}/${ano}`,
 
 
-          apurado:
-            situacao === 'Devedor',
+         apurado:
+    situacao === 'Devedor' ||
+    situacao === 'APURADO' ||
+    principal + multa + juros > 0,
 
 
           beneficioInss:
@@ -327,115 +330,89 @@ async function consultarAno(
   // ==============================
 
 
-  const lista =
-    apiData.listaSituacaoApuracaoMei ||
-    apiData.situacoesApuracaoInssMei ||
-    apiData.situacaoApuracaoInssMei ||
-    []
+ const lista =
+  apiData.listaSituacaoApuracaoMei ||
+  apiData.situacoesApuracaoInssMei ||
+  apiData.situacaoApuracaoInssMei ||
+  []
 
 
 
   const periodos =
-    Array.isArray(lista)
-      ? lista.map((item:any)=>{
+Array.isArray(lista)
+? lista.map((item:any)=>{
+
+    const detalhamento =
+      item["resumo-pa-detalhamento"]?.[0] || {}
+
+    const valores =
+      detalhamento["valores-pa"] || {}
+
+    const datas =
+      detalhamento["datas-pa"] || {}
+
+    const pa =
+      String(item.pa || '')
+
+    const mes =
+      Number(pa.substring(4,6)) - 1
 
 
-          let mes = 0
+    const principal =
+      Number(valores["valor-principal"]) || 0
+
+    const multa =
+      Number(valores["valor-multa"]) || 0
+
+    const juros =
+      Number(valores["valor-juros"]) || 0
 
 
-          const periodo =
-            String(
-              item.periodoApuracao || ''
-            )
+    return {
+
+      id:
+      `${ano}-${String(mes+1).padStart(2,'0')}`,
+
+      rotulo:
+      `${MESES[mes]}/${ano}`,
+
+      apurado:
+        detalhamento.situacao?.codigo === 2 ||
+        principal+multa+juros > 0,
 
 
-          if(periodo.includes('/')){
-
-            mes =
-              Number(
-                periodo.split('/')[0]
-              ) - 1
-
-          }
-          else if(periodo.length === 6){
-
-            mes =
-              Number(
-                periodo.substring(4,6)
-              ) - 1
-
-          }
+      beneficioInss:
+        detalhamento["checkbox-beneficio-inss"]?.checked || false,
 
 
-          if(
-            isNaN(mes) ||
-            mes < 0 ||
-            mes > 11
-          ){
+      principal,
 
-            mes = 0
+      multa,
 
-          }
+      juros,
 
-
-
-          const principal =
-            Number(item.valorPrincipal) || 0
+      total:
+        Number(valores["valor-total"]) ||
+        principal+multa+juros,
 
 
-          const multa =
-            Number(item.valorMulta) || 0
+      dataVencimento:
+        datas["data-vencimento"]
+        ? new Date(datas["data-vencimento"])
+          .toLocaleDateString('pt-BR')
+        : '-',
 
 
-          const juros =
-            Number(item.valorJuros) || 0
+      dataAcolhimento:
+        datas["data-acolhimento"]
+        ? new Date(datas["data-acolhimento"])
+          .toLocaleDateString('pt-BR')
+        : '-'
 
+    }
 
-
-          return {
-
-            id:
-              `${ano}-${String(mes+1).padStart(2,'0')}`,
-
-
-            rotulo:
-              `${MESES[mes]}/${ano}`,
-
-
-            apurado:
-              item.situacaoApuracao === 'APURADO' ||
-              item.situacaoApuracao === 'DEVEDOR' ||
-              principal+multa+juros > 0,
-
-
-            beneficioInss:false,
-
-
-            principal,
-
-            multa,
-
-            juros,
-
-
-            total:
-              principal+multa+juros,
-
-
-            dataVencimento:
-              item.dataVencimento || '-',
-
-
-            dataAcolhimento:
-              new Date()
-              .toLocaleDateString('pt-BR')
-
-          }
-
-
-        })
-      : []
-
+})
+: []
 
 
   return {
@@ -456,9 +433,6 @@ async function consultarAno(
   }
 
 }
-
-
-
 
 
 export async function consultarDebitos(
