@@ -36,6 +36,41 @@ const MESES = [
 
 const ANOS_MEI_PADRAO = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
+/**
+ * Reconstrói e fecha cirurgicamente qualquer string JSON que venha cortada ou truncada
+ */
+function recuperarJsonQuebrado(jsonIncompleto: string): string {
+  let textoLindo = jsonIncompleto.trim()
+
+  // Remove fragmentos de chaves ou propriedades cortadas na última linha
+  textoLindo = textoLindo.replace(/,[^,]*$/, '')
+  textoLindo = textoLindo.replace(/:[^:]*$/, '')
+  textoLindo = textoLindo.replace(/"[^"]*$/, '')
+
+  const pilha: string[] = []
+
+  // Mapeia a abertura de colchetes e chaves
+  for (let i = 0; i < textoLindo.length; i++) {
+    const char = textoLindo[i]
+    if (char === '{' || char === '[') {
+      pilha.push(char)
+    } else if (char === '}') {
+      if (pilha[pilha.length - 1] === '{') pilha.pop()
+    } else if (char === ']') {
+      if (pilha[pilha.length - 1] === '[') pilha.pop()
+    }
+  }
+
+  // Fecha de trás para frente tudo o que ficou aberto no buffer de rede
+  while (pilha.length > 0) {
+    const elemento = pilha.pop()
+    if (elemento === '{') textoLindo += '}'
+    if (elemento === '[') textoLindo += ']'
+  }
+
+  return textoLindo
+}
+
 async function consultarAno(
   cnpj: string,
   nome: string,
@@ -51,7 +86,7 @@ async function consultarAno(
 
   const resposta = await fetch(url, {
     cache: 'no-store',
-    signal: AbortSignal.timeout(35000), // Aumentado ligeiramente para segurar pacotes truncados pesados
+    signal: AbortSignal.timeout(30000),
     headers: {
       'Accept': 'application/json, text/plain, */*',
       'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -72,30 +107,24 @@ async function consultarAno(
   }
 
   let texto = await resposta.text()
-  console.log('[DEBUG RAW TEXT]', texto.substring(0, 300))
-
-  // BLINDAGEM CONTRA TRUNCAÇÃO: Se o JSON vier cortado na marra pelo servidor, reconstrói o fechamento básico
-  if (texto.includes('"resumo-pa":') && !texto.endsWith(']}') && !texto.endsWith(']}]]}')) {
-    console.log('[AVISO INFRA] Payload cortado detectado. Aplicando fechamento de emergência.')
-    if (texto.includes('valor-principal-detalhamento')) {
-      texto = texto.substring(0, texto.lastIndexOf('{"pa"')) || texto;
-      // Garante a finalização do nó válido anterior
-      if (!texto.endsWith(']}')) texto += ']}]}'
-    }
-  }
 
   let apiData: any
   try {
     apiData = JSON.parse(texto)
-  } catch (parseError) {
-    console.error('[ERRO PARSE] Resposta corrompida enviada pelo órgão:', texto.substring(texto.length - 100))
-    // Retorna fallback limpo do ano travado para o select não sumir na tela por erro de infra
-    return {
-      cnpj,
-      nome,
-      ano,
-      anosDisponiveis: [{ ano, bloqueado: true, motivo: 'Instabilidade no retorno dos dados.' }],
-      periodos: []
+  } catch {
+    console.log('[AVISO INFRA] Tentando salvar payload cortado por pilha recursiva...')
+    try {
+      const textoConsertado = recuperarJsonQuebrado(texto)
+      apiData = JSON.parse(textoConsertado)
+    } catch (segundoErro) {
+      console.error('[ERRO FATAL PARSE] Inviável recuperar string:', segundoErro)
+      return {
+        cnpj,
+        nome,
+        ano,
+        anosDisponiveis: [{ ano, bloqueado: false }],
+        periodos: []
+      }
     }
   }
 
