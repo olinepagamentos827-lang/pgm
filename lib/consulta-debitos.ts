@@ -49,24 +49,32 @@ async function consultarAno(
 
   console.log('[DEBUG SERPRO]', url)
 
-  // Configura um timeout ligeiramente menor para evitar travar o event loop do Node por muito tempo
+  // Configura cabeçalhos idênticos aos de um navegador Chrome real para evitar o bloqueio (WAF/Cloudflare)
   const resposta = await fetch(url, {
     cache: 'no-store',
     signal: AbortSignal.timeout(25000), 
     headers: {
-      Accept: 'application/json',
-      'User-Agent': 'Mozilla/5.0'
+      'Accept': 'application/json, text/plain, */*',
+      'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand)";v="24", "Google Chrome";v="122"',
+      'Sec-Ch-Ua-Mobile': '?0',
+      'Sec-Ch-Ua-Platform': '"Windows"',
+      'Sec-Destination': 'empty',
+      'Sec-Mode': 'cors',
+      'Sec-Site': 'same-origin',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
     }
   })
 
   if (!resposta.ok) {
     throw new Error(`HTTP ${resposta.status}`)
   }
-
   const apiData = await resposta.json()
   console.log('[DEBUG PAYLOAD]', JSON.stringify(apiData))
 
-  let nomeFinal = apiData.nomeContribuinte || nome || ''
+  let nomeFinal = apiData.nomeContribuinte || apiData.nome || nome || ''
 
   if (!nomeFinal) {
     try {
@@ -76,14 +84,14 @@ async function consultarAno(
       console.log('[DEBUG NOME ERRO]', e)
     }
   }
-
   /* 
     TRATAMENTO DE ERROS DO SERPRO (Contribuinte Baixado / DASN Pendente)
   */
-  if (apiData['mensagem-erro']) {
-    console.log('[DEBUG SERPRO MSG]', apiData['mensagem-erro'])
+  if (apiData['mensagem-erro'] || apiData.mensagemErro) {
+    const erroObj = apiData['mensagem-erro'] || apiData.mensagemErro
+    console.log('[DEBUG SERPRO MSG]', erroObj)
     
-    const textoErro = apiData['mensagem-erro'].texto || 'Erro interno do órgão validador.'
+    const textoErro = erroObj.texto || 'Erro interno do órgão validador.'
     
     return {
       cnpj,
@@ -91,12 +99,13 @@ async function consultarAno(
       ano,
       anosDisponiveis: ANOS_MEI_PADRAO.map(a => ({
         ano: a,
-        bloqueado: a === ano, // Marca especificamente este ano como bloqueado
+        bloqueado: a === ano, 
         motivo: a === ano ? textoErro : undefined
       })),
       periodos: []
     }
   }
+
 
   /* PADRÃO NOVO SERPRO */
   const listaResumo = apiData['resumo-pa'] || apiData.resumoPa || []
