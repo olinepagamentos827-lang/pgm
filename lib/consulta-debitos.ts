@@ -53,13 +53,52 @@ const ANOS_MEI_PADRAO = [
   2020,
 ]
 
+async function buscarAnosDisponiveis(
+  cnpj:string,
+  nome:string
+):Promise<AnoDisponivel[]> {
+
+  const resultado:AnoDisponivel[] = []
+
+  for(const ano of ANOS_MEI_PADRAO){
+
+    const consulta = await consultarAno(
+      cnpj,
+      nome,
+      ano,
+      false
+    )
+
+
+    if(consulta.periodos.length > 0){
+
+      resultado.push({
+        ano,
+        bloqueado:false
+      })
+
+    } else {
+
+      resultado.push({
+        ano,
+        bloqueado:true,
+        motivo:'Não optante'
+      })
+
+    }
+
+  }
+
+  return resultado
+
+}
 
 async function consultarAno(
   cnpj:string,
   nome:string,
-  ano:number
-):Promise<ConsultaDebitosResponse>{
-
+  ano:number,
+  montarAnos:boolean = true
+)
 
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 
@@ -164,8 +203,8 @@ if(apiData['mensagem-erro']){
 
     ano,
 
-    anosDisponiveis:
-      ANOS_MEI_PADRAO,
+   
+      anosDisponiveis: [],
 
     periodos:[]
 
@@ -326,8 +365,7 @@ if(
 
       ano,
 
-      anosDisponiveis:
-        ANOS_MEI_PADRAO,
+      anosDisponiveis: [],
 
       periodos
 
@@ -439,8 +477,7 @@ Array.isArray(lista)
 
     ano,
 
-    anosDisponiveis:
-      ANOS_MEI_PADRAO,
+    anosDisponiveis: [],
 
     periodos
 
@@ -463,14 +500,24 @@ export async function consultarDebitos(
       await consultarAno(
         cnpj,
         nome,
-        ano
+        ano,
+        false
       )
 
 
-    // encontrou no ano solicitado
+    const anosDisponiveis =
+      await buscarAnosDisponiveis(
+        cnpj,
+        resultado.nome
+      )
+
+
     if(resultado.periodos.length > 0){
 
-      return resultado
+      return {
+        ...resultado,
+        anosDisponiveis
+      }
 
     }
 
@@ -482,16 +529,11 @@ export async function consultarDebitos(
 
 
 
-    for(
-      const anoAnterior of ANOS_MEI_PADRAO
-    ){
+    for(const anoAnterior of ANOS_MEI_PADRAO){
 
 
-      if(
-        anoAnterior === ano
-      ){
+      if(anoAnterior === ano)
         continue
-      }
 
 
 
@@ -499,20 +541,18 @@ export async function consultarDebitos(
         await consultarAno(
           cnpj,
           resultado.nome,
-          anoAnterior
+          anoAnterior,
+          false
         )
 
 
 
-      if(
-        antigo.periodos.length > 0
-      ){
+      if(antigo.periodos.length > 0){
+
 
         console.log(
           '[DEBUG] Encontrado ano:',
-          anoAnterior,
-          'quantidade:',
-          antigo.periodos.length
+          anoAnterior
         )
 
 
@@ -520,14 +560,11 @@ export async function consultarDebitos(
 
           ...antigo,
 
-          // mantém o ano real encontrado
-          ano: anoAnterior,
+          ano:anoAnterior,
 
-          anosDisponiveis:
-            ANOS_MEI_PADRAO
+          anosDisponiveis
 
         }
-
 
       }
 
@@ -536,25 +573,28 @@ export async function consultarDebitos(
 
 
 
-    return resultado
+    return {
+
+      ...resultado,
+
+      anosDisponiveis
+
+    }
 
 
 
-  }
-  catch(error:any){
+  } catch(error:any){
 
     console.error(
       '[ERRO CONSULTA DEBITOS]',
       error
     )
 
-
     throw error
 
   }
 
 }
-
 
 
 
