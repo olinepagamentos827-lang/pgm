@@ -34,7 +34,7 @@ const MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ]
 
-// CORREÇÃO DEFINTIVA: Array de anos reestruturado e preenchido corretamente
+// CORREÇÃO DEFINTIVA: Array de escopo populado explicitamente para a fila não quebrar
 const ANOS_MEI_PADRAO = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
 async function consultarAno(
@@ -94,7 +94,7 @@ async function consultarAno(
     console.log('[DEBUG SERPRO MSG]', erroObj)
     const textoErro = erroObj.texto || ''
 
-    // Se exige a DASN anterior, o MEI existia e possui débitos! FICA TOTALMENTE CLICÁVEL
+    // Se exige a DASN anterior, a empresa existia e possui débitos. FICA TOTALMENTE CLICÁVEL
     if (textoErro.includes('Antes de prosseguir') || textoErro.includes('DASN-Simei')) {
       return {
         cnpj,
