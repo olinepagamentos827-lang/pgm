@@ -7,75 +7,135 @@ export interface ConsultaCnpjResponse {
 }
 
 
-export async function consultarCnpj(cnpj:string){
+export async function consultarCnpj(
+  cnpj:string
+):Promise<ConsultaCnpjResponse>{
+
 
   try {
 
-    const cnpjLimpo = cnpj.replace(/\D/g,'')
 
-  const baseUrl =
-  process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : 'http://localhost:3000'
+    const cnpjLimpo =
+      cnpj.replace(/\D/g,'')
 
 
-const url =
-`${baseUrl}/api/cnpj?cnpj=${cnpjLimpo}`
+    const apiKey =
+      process.env.CNPJ_API_KEY
+
+
+
+    if(!apiKey){
+
+      console.error(
+        '[SNOOP] API KEY AUSENTE'
+      )
+
+      return {
+
+        sucesso:false,
+        razaoSocial:'',
+        nomeFantasia:'',
+        cnpj:cnpjLimpo,
+        erro:'API KEY ausente'
+
+      }
+
+    }
+
 
 
     console.log(
-      '[DEBUG CONSULTA CNPJ]',
-      url
+      '[SNOOP] Consultando:',
+      cnpjLimpo
     )
+
 
 
     const resposta =
       await fetch(
-        url,
+        `https://snoopintelligence.cloud/api/v2/cnpj/${cnpjLimpo}`,
         {
+
+          method:'GET',
+
+          headers:{
+
+            Authorization:
+            `Bearer ${apiKey}`,
+
+            Accept:
+            'application/json'
+
+          },
+
           cache:'no-store'
+
         }
       )
+
+
+
+    const texto =
+      await resposta.text()
+
+
+
+    console.log(
+      '[SNOOP RAW]',
+      texto.substring(0,500)
+    )
+
 
 
     if(!resposta.ok){
 
       throw new Error(
-        `API CNPJ HTTP ${resposta.status}`
+        `SNOOP HTTP ${resposta.status}`
       )
 
     }
 
 
+
     const dados =
-      await resposta.json()
+      JSON.parse(texto)
 
 
-    console.log(
-      '[DEBUG RETORNO CNPJ]',
-      JSON.stringify(dados)
-    )
+
+    const empresa =
+      dados?.data || dados
+
 
 
     return {
 
+
+      sucesso:true,
+
+
+      cnpj:
+      empresa.cnpj ||
+      cnpjLimpo,
+
+
       razaoSocial:
-        dados.razao_social ||
-        dados.razaoSocial ||
-        dados.data?.razao_social ||
-        '',
+      empresa.razao_social ||
+      empresa.razaoSocial ||
+      '',
 
 
       nomeFantasia:
-        dados.nome_fantasia ||
-        dados.nomeFantasia ||
-        dados.data?.nome_fantasia ||
-        ''
+      empresa.nome_fantasia ||
+      empresa.nomeFantasia ||
+      ''
+
 
     }
 
 
-  } catch(error){
+
+  } catch(error:any){
+
 
     console.error(
       '[ERRO CONSULTA CNPJ]',
@@ -85,8 +145,15 @@ const url =
 
     return {
 
+      sucesso:false,
+
       razaoSocial:'',
-      nomeFantasia:''
+
+      nomeFantasia:'',
+
+      cnpj,
+
+      erro:error.message
 
     }
 
