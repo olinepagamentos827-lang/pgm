@@ -9,25 +9,17 @@ import {
 import { useMei } from '@/lib/mei-context'
 import { PaymentModal, type PagamentoInfo } from '@/components/payment-modal'
 
-
-
 const fetcher = async (url: string) => {
-
   const r = await fetch(url)
-
   const texto = await r.text()
 
-  console.log(
-    '[DEBUG FRONT DEBITOS]',
-    texto
-  )
+  console.log('[DEBUG FRONT DEBITOS]', texto)
 
-  if(!r.ok){
+  if (!r.ok) {
     throw new Error('Falha na consulta')
   }
 
   return JSON.parse(texto) as ConsultaDebitosResponse
-
 }
 
 export function EmitirGuia() {
@@ -40,10 +32,9 @@ export function EmitirGuia() {
   const [dataPagamento, setDataPagamento] = useState('31/08/2026')
   const [pagamento, setPagamento] = useState<PagamentoInfo | null>(null)
 
-  const key =
- cnpj
- ? `/api/debitos?cnpj=${encodeURIComponent(cnpj)}&nome=${encodeURIComponent(nome)}`
- : null
+  const key = cnpj
+    ? `/api/debitos?cnpj=${encodeURIComponent(cnpj)}&nome=${encodeURIComponent(nome)}`
+    : null
 
   const { data, isLoading, mutate } = useSWR(key, fetcher, {
     revalidateOnFocus: false,
@@ -62,7 +53,10 @@ export function EmitirGuia() {
       .reduce((acc, p) => acc + (p.total ?? 0), 0)
   }, [periodos, selecionados])
 
- function handleConsultar() {
+  function handleConsultar() {
+    if (!anoSelect) return
+    setAnoConsultado(Number(anoSelect))
+  }
 
   function toggleSelecionado(id: string) {
     setSelecionados((prev) => {
@@ -115,8 +109,7 @@ export function EmitirGuia() {
       pixCode,
     })
   }
-
- return (
+  return (
     <>
       {/* PAINEL EXTERNO */}
       <div
@@ -144,75 +137,64 @@ export function EmitirGuia() {
             text-[#333333]
           "
         >
-          <label
-            htmlFor="ano"
-            className="text-[13px] font-bold text-[#333333]"
-          >
+          <label htmlFor="ano" className="text-[13px] font-bold text-[#333333]">
             Informe o Ano-Calendário:
           </label>
 
-         <select
-  id="ano"
-  value={anoSelect}
-  onChange={(e) => setAnoSelect(e.target.value)}
-  className="
-    h-[28px]
-    w-[80px]
-    cursor-pointer
-    rounded-[4px]
-    border
-    border-[#c8c8c8]
-    bg-[linear-gradient(to_bottom,#ffffff_0%,#f1f1f1_55%,#dddddd_100%)]
-    px-2
-    py-0
-    text-[13px]
-    text-neutral-800
-    shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(0,0,0,0.12)]
-    outline-none
-  "
->
-  <option value="">&nbsp;</option>
+          <select
+            id="ano"
+            value={anoSelect}
+            onChange={(e) => setAnoSelect(e.target.value)}
+            className="
+              h-[28px]
+              w-[80px]
+              cursor-pointer
+              rounded-[4px]
+              border
+              border-[#c8c8c8]
+              bg-[linear-gradient(to_bottom,#ffffff_0%,#f1f1f1_55%,#dddddd_100%)]
+              px-2
+              py-0
+              text-[13px]
+              text-neutral-800
+              shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(0,0,0,0.12)]
+              outline-none
+            "
+          >
+            <option value="">&nbsp;</option>
+            {data?.anosDisponiveis?.map((item) => (
+              <option key={item.ano} value={item.ano} disabled={item.bloqueado}>
+                {item.ano}
+                {item.bloqueado ? ' Não optante' : ''}
+              </option>
+            ))}
+          </select>
 
-  {data?.anosDisponiveis?.map((item)=>(
-    <option
-      key={item.ano}
-      value={item.ano}
-      disabled={item.bloqueado}
-    >
-      {item.ano}
-      {item.bloqueado ? ' Não optante' : ''}
-    </option>
-  ))}
-
-</select>
-
-
-<button
-  type="button"
-  onClick={handleConsultar}
-  className="
-    h-[28px]
-    cursor-pointer
-    rounded-[4px]
-    border
-    border-[#398439]
-    bg-[linear-gradient(to_bottom,#55b355_0%,#48a348_100%)]
-    px-2
-    text-[13px]
-    font-medium
-    text-white
-  "
->
-  Ok
-</button>
+          <button
+            type="button"
+            onClick={handleConsultar}
+            className="
+              h-[28px]
+              cursor-pointer
+              rounded-[4px]
+              border
+              border-[#398439]
+              bg-[linear-gradient(to_bottom,#55b355_0%,#48a348_100%)]
+              px-2
+              text-[13px]
+              font-medium
+              text-white
+            "
+          >
+            Ok
+          </button>
         </div>
 
         {/* CONTEÚDO APÓS CONSULTA */}
         {anoConsultado != null && (
-          /* UM ÚNICO QUADRADO BRANCO COM BORDA, ARREDONDAMENTO E SOMBRA ENVOLVENDO TUDO */
           <div className="mx-8 mt-4 rounded-[4px] border border-[#dcdcdc] bg-white p-4 shadow-[0_4px_12px_rgba(0,0,0,0.40)]">
             
-                       {/* TÍTULO DA SEÇÃO COMO UMA FAIXA CINZA OFICIAL */}
+            {/* TÍTULO DA SEÇÃO */}
             <div 
               className="
                 -mx-4 
@@ -233,12 +215,11 @@ export function EmitirGuia() {
               </h2>
             </div>
 
-			                        {isLoading ? (
+            {isLoading ? (
               <p className="py-8 text-center text-sm text-neutral-500">
                 Carregando débitos...
               </p>
             ) : (
-              /* TABELA APENAS COM AS LINHAS HORIZONTAIS DENTRO DO CARD */
               <div className="mx-3 overflow-x-auto">
                 <table
                   className="
@@ -250,9 +231,7 @@ export function EmitirGuia() {
                     text-[#333333]
                   "
                 >
-                  {/* BORDAS DO CABEÇALHO (SUPERIOR MAIS FINA) */}
                   <thead className="bg-white">
-                    {/* PRIMEIRA LINHA DO CABEÇALHO */}
                     <tr className="h-[28px] border-b border-[#d0d0d0] bg-[#e6e6e6] text-[#0A4C62] font-bold">
                       <th rowSpan={2} className="w-[35px] px-1 py-0 text-center align-middle">
                         <input
@@ -277,8 +256,6 @@ export function EmitirGuia() {
                       </th>
                       <th colSpan={2} className="px-2 py-0" />
                     </tr>
-
-                    {/* SEGUNDA LINHA DO CABEÇALHO */}
                     <tr className="h-[28px] border-b border-[#d0d0d0] bg-[#e6e6e6] text-[#0A4C62] font-bold">
                       <th className="px-2 py-0 text-center align-middle">Principal</th>
                       <th className="px-2 py-0 text-center align-middle">Multa</th>
@@ -289,8 +266,7 @@ export function EmitirGuia() {
                     </tr>
                   </thead>
 
-                                    {/* CORPO DA TABELA SEM LINHA NENHUMA NO ÚLTIMO ELEMENTO */}
-                 <tbody className="bg-white">
+                  <tbody className="bg-white">
                     {periodos.map((p) => (
                       <tr
                         key={p.id}
@@ -325,24 +301,19 @@ export function EmitirGuia() {
                             onChange={() => toggleBeneficio(p.id)}
                           />
                         </td>
-                        <td className="px-2 py-0 text-right align-middle pr-4">{p.principal > 0 ? formatBRL(p.principal) : "-"}</td>
-                        <td className="px-2 py-0 text-right align-middle pr-4">{p.multa > 0 ? formatBRL(p.multa) : "-"}</td>
-                        <td className="px-2 py-0 text-right align-middle pr-4">{p.juros > 0 ? formatBRL(p.juros) : "-"}</td>
-                        <td className="px-2 py-0 text-right align-middle pr-4 font-regular">{p.total > 0 ? formatBRL(p.total) : "-"}</td>
+                        <td className="px-2 py-0 text-right align-middle pr-4">{(p.principal ?? 0) > 0 ? formatBRL(p.principal) : "-"}</td>
+                        <td className="px-2 py-0 text-right align-middle pr-4">{(p.multa ?? 0) > 0 ? formatBRL(p.multa) : "-"}</td>
+                        <td className="px-2 py-0 text-right align-middle pr-4">{(p.juros ?? 0) > 0 ? formatBRL(p.juros) : "-"}</td>
+                        <td className="px-2 py-0 text-right align-middle pr-4 font-regular">{(p.total ?? 0) > 0 ? formatBRL(p.total) : "-"}</td>
                         <td className="px-2 py-0 text-center align-middle">{p.dataVencimento ?? "-"}</td>
                         <td className="px-2 py-0 text-center align-middle">{p.dataAcolhimento ?? "-"}</td>
                       </tr>
                     ))}
                   </tbody>
-
-
                 </table>
               </div>
             )}
-
-			
-			
-                                    {/* FAIXA CINZA OFICIAL INFERIOR (ENVELOPA A DATA E OS BOTÕES DE FORA A FORA) */}
+            {/* FAIXA CINZA OFICIAL INFERIOR */}
             <div 
               className="
                 -mx-4 
@@ -381,7 +352,7 @@ export function EmitirGuia() {
                 />
               </div>
 
-                            {/* BOTÕES DE AÇÃO COM TOM VERDE MAS NÃO CLICÁVEIS */}
+              {/* BOTÕES DE AÇÃO */}
               <div className="flex flex-wrap items-center justify-center gap-2">
                 <button
                   type="button"
@@ -447,34 +418,31 @@ export function EmitirGuia() {
                   Pagar Online
                 </button>
               </div>
-
             </div>
 
-          </div> /* FECHAMENTO DO ÚNICO CARD BRANCO ELEVADO */
-
+          </div>
         )}
 
-        {/* TEXTO DE INFORMAÇÕES IMPORTANTES — AGORA DE FATO DENTRO DO CONTEÍNER CINZA */}
+        {/* TEXTO DE INFORMAÇÕES IMPORTANTES */}
         {anoConsultado != null && (
-           <div className="mt-5 px-6 pb-4 text-[12px] leading-[1]">
+          <div className="mt-5 px-6 pb-4 text-[12px] leading-relaxed">
             <p className="mb-2 font-normal text-[#006699]">
               Informações importantes:
             </p>
             <ol className="ml-6 list-decimal space-y-2 text-[#006699]">
               <li>
-                A opção "Emitir DAS" gera um documento em formato PDF para pagamento na rede bancária credenciada.
+                A opção &quot;Emitir DAS&quot; gera um documento em formato PDF para pagamento na rede bancária credenciada.
               </li>
               <li>
-                A opção "Pagar Online" possibilita realizar o pagamento do documento de arrecadação por meio do débito em conta corrente ou cartão de crédito. No momento, o débito em conta está disponível apenas para usuários do Banco do Brasil com acesso ao Internet Banking.
+                A opção &quot;Pagar Online&quot; possibilita realizar o pagamento do documento de arrecadação por meio do débito em conta corrente ou cartão de crédito. No momento, o débito em conta está disponível apenas para usuários do Banco do Brasil com acesso ao Internet Banking.
               </li>
               <li>
-                Ao optar por "Pagar Online" por meio do débito em conta, o comprovante de pagamento pode ser impresso após a confirmação da transação pelo banco. Se escolher cartão de crédito, o comprovante de arrecadação estará disponível até o segundo dia útil após o pagamento. A impressão pode ser feita pelo Portal e-CAC, acessando &quot;Pagamentos e Parcelamentos&quot; &gt; &quot;Consulta de Comprovante de Pagamento - DARF, DAS e DJE&quot;, ou pelo Portal de Serviços da RFB.
+                Ao optar por &quot;Pagar Online&quot; por meio do débito em conta, o comprovante de pagamento pode ser impresso após a confirmação da transação pelo banco. Se escolher cartão de crédito, o comprovante de arrecadação estará disponível até o segundo dia útil após o pagamento. A impressão pode ser feita pelo Portal e-CAC, acessando &quot;Pagamentos e Parcelamentos&quot; &gt; &quot;Consulta de Comprovante de Pagamento - DARF, DAS e DJE&quot;, ou pelo Portal de Serviços da RFB.
               </li>
             </ol>
           </div>
         )}
-
-      </div> {/* FECHAMENTO REAL DO PAINEL EXTERNO CINZA */}
+      </div>
 
       {/* Modal global */}
       <PaymentModal info={pagamento} onClose={() => setPagamento(null)} />
