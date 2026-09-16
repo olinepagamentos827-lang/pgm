@@ -34,7 +34,7 @@ const MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ]
 
-const ANOS_MEI_PADRAO = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
+const ANOS_MEI_PADRAO = [2026, 2025, 2024, 2023, 2022, 2021]
 
 async function consultarAno(
   cnpj: string,
@@ -86,60 +86,45 @@ async function consultarAno(
   }
 
   /* 
-    TRATAMENTO DE ERROS DO SERPRO INDIVIDUAL DO ANO
+    TRATAMENTO DE RETORNOS DE ERRO/AVISO DO SERPRO
   */
- if (apiData['mensagem-erro'] || apiData.mensagemErro) {
+  if (apiData['mensagem-erro'] || apiData.mensagemErro) {
+    const erroObj = apiData['mensagem-erro'] || apiData.mensagemErro
+    console.log('[DEBUG SERPRO MSG]', erroObj)
+    const textoErro = erroObj.texto || ''
 
-  const erroObj =
-    apiData['mensagem-erro'] ||
-    apiData.mensagemErro
+    // CRITERIO CORRIGIDO: Se exige a DASN, a empresa existia e há ações pendentes.
+    // PORTANTO, O ANO DEVE FICAR 100% LIBERADO PARA CLIQUE E GERAÇÃO DE DEBITOS
+    if (textoErro.includes('Antes de prosseguir') || textoErro.includes('DASN-Simei')) {
+      return {
+        cnpj,
+        nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
+        ano,
+        anosDisponiveis: [
+          {
+            ano,
+            bloqueado: false // 👈 TOTALMENTE CLICÁVEL
+          }
+        ],
+        periodos: []
+      }
+    }
 
-  console.log('[DEBUG SERPRO MSG]', erroObj)
-
-  const textoErro =
-    erroObj.texto || ''
-
-
-  // NÃO É BLOQUEIO.
-  // SERPRO está pedindo declaração anterior.
-  if (
-    textoErro.includes('Antes de prosseguir') ||
-    textoErro.includes('DASN-Simei')
-  ) {
-
+    // Se o erro indicar que a empresa não era optante real ou está baixada no período
     return {
       cnpj,
       nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
       ano,
-      anosDisponiveis:[
+      anosDisponiveis: [
         {
           ano,
-          bloqueado:false
+          bloqueado: true, // 👈 TRAVADO NO SELECT
+          motivo: 'Não optante'
         }
       ],
-      periodos:[]
+      periodos: []
     }
-
   }
-
-
-  // Aqui sim é não optante real
-
-  return {
-    cnpj,
-    nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
-    ano,
-    anosDisponiveis:[
-      {
-        ano,
-        bloqueado:true,
-        motivo:'Não optante'
-      }
-    ],
-    periodos:[]
-  }
-
-}
 
   /* PADRÃO NOVO SERPRO */
   const listaResumo = apiData['resumo-pa'] || apiData.resumoPa || []
@@ -190,7 +175,7 @@ async function consultarAno(
       anosDisponiveis: [
         {
           ano,
-          bloqueado: false
+          bloqueado: false // Clicável
         }
       ],
       periodos
@@ -246,58 +231,21 @@ export async function consultarDebitos(
   cnpj: string,
   nome: string
 ): Promise<ConsultaDebitosResponse> {
-  let anosBusca = [...ANOS_MEI_PADRAO]
   let nomeContribuinte = nome || 'MICROEMPREENDEDOR INDIVIDUAL'
-
-  // Precisam existir fora do try, pois são usados depois no
-  // preenchimento retroativo dos anos bloqueados por filtro cadastral.
-  let anoAbertura: number | null = null
-  let anoBaixa: number | null = null
-
-  try {
-    const dadosEmpresa = await consultarCnpj(cnpj)
-    if (dadosEmpresa.razaoSocial) nomeContribuinte = dadosEmpresa.razaoSocial
-
-    const anoAberturaCalc = dadosEmpresa.dataAbertura ? new Date(dadosEmpresa.dataAbertura).getFullYear() : null
-    anoAbertura = anoAberturaCalc !== null && !Number.isNaN(anoAberturaCalc) ? anoAberturaCalc : null
-
-    const anoBaixaCalc = dadosEmpresa.situacao === 'BAIXADA' && dadosEmpresa.dataSituacao ? new Date(dadosEmpresa.dataSituacao).getFullYear() : null
-    anoBaixa = anoBaixaCalc !== null && !Number.isNaN(anoBaixaCalc) ? anoBaixaCalc : null
-
-    anosBusca = ANOS_MEI_PADRAO.filter(ano => {
-
-  // antes da abertura não consulta
-  if (anoAbertura && ano < anoAbertura) {
-    return false
-  }
-
-  // depois da baixa não consulta
-  if (anoBaixa && ano > anoBaixa) {
-    return false
-  }
-
-  return true
-})
-  } catch (err) {
-    console.log('[DEBUG FILTRO ANOS ERRO]', err)
-  }
-
-  if (anosBusca.length === 0) anosBusca = [...ANOS_MEI_PADRAO]
 
   const todosPeriodos: PeriodoApuracao[] = []
   const mapaAnosDisponiveis = new Map<number, AnoDisponivel>()
 
-  ANOS_MEI_PADRAO.forEach(ano => {
-  mapaAnosDisponiveis.set(ano, {
-    ano,
-    bloqueado: true,
-    motivo: 'Não optante'
+  // Organiza o escopo de 2021 a 2026 de forma crescente igual ao layout do anexo
+  const escopoAnos = [2021, 2022, 2023, 2024, 2025, 2026]
+
+  escopoAnos.forEach(ano => {
+    mapaAnosDisponiveis.set(ano, { ano, bloqueado: false })
   })
-})
 
   const esperar = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-  for (const ano of anosBusca) {
+  for (const ano of escopoAnos) {
     try {
       console.log(`[FILA CONTROLADA] Buscando ano: ${ano}`)
       const respostaAno = await consultarAno(cnpj, nomeContribuinte, ano)
@@ -310,15 +258,13 @@ export async function consultarDebitos(
         todosPeriodos.push(...respostaAno.periodos)
       }
 
-      // CONSOLIDAÇÃO CORRETA: Acumula os bloqueios no mapa sem sobrescrever dados anteriores
+      // Sincroniza a resposta real do validador mantendo bloqueios apenas nos não optantes reais
       respostaAno.anosDisponiveis.forEach(statusAno => {
-        if (statusAno.bloqueado) {
-          mapaAnosDisponiveis.set(statusAno.ano, {
-            ano: statusAno.ano,
-            bloqueado: true,
-            motivo: statusAno.motivo
-          })
-        }
+        mapaAnosDisponiveis.set(statusAno.ano, {
+          ano: statusAno.ano,
+          bloqueado: statusAno.bloqueado, 
+          motivo: statusAno.motivo
+        })
       })
 
     } catch (error: any) {
@@ -326,31 +272,19 @@ export async function consultarDebitos(
       mapaAnosDisponiveis.set(ano, { 
         ano, 
         bloqueado: true, 
-        motivo: 'Instabilidade temporária no validador. Tente novamente.' 
+        motivo: 'Não optante' 
       })
     }
     await esperar(250)
   }
 
-  ANOS_MEI_PADRAO.forEach(ano => {
-
-  if (anosBusca.includes(ano)) {
-    return
-  }
-
-  mapaAnosDisponiveis.set(ano, {
-  ano,
-  bloqueado: true,
-  motivo: 'Não optante'
-})
-})
   todosPeriodos.sort((a, b) => b.id.localeCompare(a.id))
 
   return {
     cnpj,
     nome: nomeContribuinte,
-    ano: anosBusca, 
-    anosDisponiveis: ANOS_MEI_PADRAO.map(ano => {
+    ano: escopoAnos, 
+    anosDisponiveis: escopoAnos.map(ano => {
       const dadosAno = mapaAnosDisponiveis.get(ano)
       return {
         ano,
