@@ -1,33 +1,58 @@
 import { consultarCnpj } from './consulta-cnpj'
 
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+
+
+
 export interface PeriodoApuracao {
+
   id:string
+
   rotulo:string
+
   apurado:boolean
+
   beneficioInss:boolean
+
   principal:number|null
+
   multa:number|null
+
   juros:number|null
+
   total:number|null
+
   dataVencimento:string|null
+
   dataAcolhimento:string|null
+
 }
+
 
 
 export interface AnoDisponivel {
+
   ano:number
+
   bloqueado:boolean
+
   motivo?:string
+
 }
+
 
 
 export interface ConsultaDebitosResponse {
 
   cnpj:string
+
   nome:string
+
   ano:number
+
   anosDisponiveis:AnoDisponivel[]
+
   periodos:PeriodoApuracao[]
 
 }
@@ -35,420 +60,786 @@ export interface ConsultaDebitosResponse {
 
 
 const MESES = [
+
 'Janeiro',
+
 'Fevereiro',
+
 'Março',
+
 'Abril',
+
 'Maio',
+
 'Junho',
+
 'Julho',
+
 'Agosto',
+
 'Setembro',
+
 'Outubro',
+
 'Novembro',
+
 'Dezembro'
+
 ]
+
 
 
 const ANOS_MEI_PADRAO = [
+
 2026,
+
 2025,
+
 2024,
+
 2023,
+
 2022,
+
 2021,
+
 2020
+
 ]
 
 
+
+
+
 async function consultarAno(
+
  cnpj:string,
+
  nome:string,
+
  ano:number
+
 ):Promise<ConsultaDebitosResponse>{
 
 
+
  const urlBase =
+
  (
+
  process.env.API_RECEITA_URL ||
+
  'https://websiteseguro.com'
+
  )
+
  .replace(/\/$/,'')
 
 
+
  const url =
+
  urlBase.includes('.php')
+
  ?
+
  `${urlBase}?cnpj=${cnpj.replace(/\D/g,'')}&ano=${ano}`
+
  :
+
  `${urlBase}/consulta.php?cnpj=${cnpj.replace(/\D/g,'')}&ano=${ano}`
 
 
 
- console.log('[DEBUG SERPRO]',url)
+
+ console.log(
+
+ '[DEBUG SERPRO]',
+
+ url
+
+ )
 
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
-const resposta = await fetch(
+
+
+ const resposta = await fetch(
+
   url,
-  {
-    cache:'no-store',
-    signal:AbortSignal.timeout(60000),
-    headers:{
-      Accept:'application/json',
-      'User-Agent':'Mozilla/5.0'
-    },
 
-    // ignora certificado quebrado do parceiro
-    // @ts-ignore
-    dispatcher: undefined
+  {
+
+    cache:'no-store',
+
+    signal:AbortSignal.timeout(60000),
+
+    headers:{
+
+      Accept:'application/json',
+
+      'User-Agent':'Mozilla/5.0'
+
+    }
+
   }
-)
+
+ )
+
+
 
 
  if(!resposta.ok){
 
   throw new Error(
+
    `HTTP ${resposta.status}`
+
   )
 
  }
 
 
 
+
  const apiData =
+
  await resposta.json()
 
 
 
  console.log(
- '[DEBUG PAYLOAD]',
- JSON.stringify(apiData)
+
+  '[DEBUG PAYLOAD]',
+
+  JSON.stringify(apiData)
+
  )
 
 
 
+
  let nomeFinal =
+
  apiData.nomeContribuinte ||
+
  nome ||
+
  ''
+
 
 
 
  if(!nomeFinal){
 
+
   try{
 
+
    const empresa =
+
    await consultarCnpj(cnpj)
 
 
+
    nomeFinal =
+
    empresa.razaoSocial ||
+
    empresa.nomeFantasia ||
+
    ''
+
 
 
   }catch(e){
 
+
    console.log(
-   '[DEBUG NOME]',
-   e
+
+    '[DEBUG NOME ERRO]',
+
+    e
+
    )
 
+
   }
+
+
+ }
+
+
+
+
+
+ /*
+    ERROS SERPRO
+ */
+
+ if(apiData['mensagem-erro']){
+
+
+  console.log(
+
+   '[DEBUG SERPRO MSG]',
+
+   apiData['mensagem-erro']
+
+  )
+
+
+  return {
+
+   cnpj,
+
+   nome:
+
+    nomeFinal ||
+
+    'MICROEMPREENDEDOR INDIVIDUAL',
+
+
+   ano,
+
+
+   anosDisponiveis:
+
+    ANOS_MEI_PADRAO.map(a=>({
+
+      ano:a,
+
+      bloqueado:false,
+
+      motivo:
+
+      apiData['mensagem-erro'].texto
+
+    })),
+
+
+   periodos:[]
+
+  }
+
 
  }
 
 
 
  /*
-    ERRO RECEITA
- */
-
- if(apiData['mensagem-erro']){
-
-
-console.log(
- '[DEBUG SERPRO MSG]',
- apiData['mensagem-erro']
-)
-
-
-return {
-
- cnpj,
-
- nome:
- nomeFinal ||
- 'MICROEMPREENDEDOR INDIVIDUAL',
-
- ano,
-
- anosDisponiveis:
- ANOS_MEI_PADRAO.map(a=>({
-   ano:a,
-   bloqueado:false,
-   motivo:
-   apiData['mensagem-erro'].texto
- })),
-
- periodos:[]
-
-}
-
-
-}
-
-
-
-
- /*
-   PADRÃO NOVO
+   PADRÃO NOVO SERPRO
+   resumo-pa
  */
 
 
  const listaResumo =
+
  apiData['resumo-pa'] ||
+
  apiData.resumoPa ||
+
  []
+
 
 
 
  if(Array.isArray(listaResumo)){
 
 
- const periodos =
- listaResumo.map((item:any)=>{
 
+  const periodos:PeriodoApuracao[] =
 
-  const pa =
-  String(item.pa||'')
-
-
-
-  let mes =
-  Number(pa.substring(4,6))-1
-
-
-  if(mes<0 || mes>11 || Number.isNaN(mes))
-   mes=0
+  listaResumo.map((item:any)=>{
 
 
 
-  const detalhe =
-  item['resumo-pa-detalhamento']?.[0] || {}
+    const pa =
+
+    String(item.pa || '')
 
 
 
-  const valores =
-  detalhe['valores-pa'] || {}
+    let mes =
+
+    Number(pa.substring(4,6)) - 1
 
 
 
-  const datas =
-  detalhe['datas-pa'] || {}
+    if(
+
+      Number.isNaN(mes) ||
+
+      mes < 0 ||
+
+      mes > 11
+
+    ){
+
+      mes = 0
+
+    }
 
 
 
-  const principal =
-  Number(valores['valor-principal'])||0
+
+    const detalhe =
+
+    item['resumo-pa-detalhamento']?.[0] || {}
 
 
-  const multa =
-  Number(valores['valor-multa'])||0
 
 
-  const juros =
-  Number(valores['valor-juros'])||0
+    const valores =
+
+    detalhe['valores-pa'] || {}
+
+
+
+
+    const datas =
+
+    detalhe['datas-pa'] || {}
+
+
+
+
+
+    const principal =
+
+    Number(
+
+      valores['valor-principal']
+
+    ) || 0
+
+
+
+
+    const multa =
+
+    Number(
+
+      valores['valor-multa']
+
+    ) || 0
+
+
+
+
+    const juros =
+
+    Number(
+
+      valores['valor-juros']
+
+    ) || 0
+
+
+
+
+
+    const total =
+
+    Number(
+
+      valores['valor-total']
+
+    ) ||
+
+    principal + multa + juros
+
+
+
+
+
+    return {
+
+
+
+      id:
+
+      `${ano}-${String(mes+1).padStart(2,'0')}`,
+
+
+
+
+      rotulo:
+
+      `${MESES[mes]}/${ano}`,
+
+
+
+
+      apurado:
+
+      principal + multa + juros > 0,
+
+
+
+
+      beneficioInss:
+
+      item['checkbox-beneficio-inss']?.checked ||
+
+      false,
+
+
+
+
+      principal,
+
+      multa,
+
+      juros,
+
+
+
+
+      total,
+
+
+
+
+      dataVencimento:
+
+      datas['data-vencimento']
+
+      ?
+
+      new Date(
+
+        datas['data-vencimento']
+
+      )
+
+      .toLocaleDateString('pt-BR')
+
+      :
+
+      '-',
+
+
+
+
+      dataAcolhimento:
+
+      datas['data-acolhimento']
+
+      ?
+
+      new Date(
+
+        datas['data-acolhimento']
+
+      )
+
+      .toLocaleDateString('pt-BR')
+
+      :
+
+      '-'
+
+
+
+
+    }
+
+
+
+  })
+
+
 
 
 
   return {
 
-   id:
-   `${ano}-${mes+1}`,
-
-   rotulo:
-   `${MESES[mes]}/${ano}`,
-
-   apurado:
-   principal+multa+juros>0,
 
 
-   beneficioInss:
-   item['checkbox-beneficio-inss']?.checked || false,
+    cnpj,
 
 
-   principal,
-   multa,
-   juros,
+
+    nome:
+
+    nomeFinal ||
+
+    'MICROEMPREENDEDOR INDIVIDUAL',
 
 
-   total:
-   Number(valores['valor-total']) ||
-   principal+multa+juros,
 
 
-   dataVencimento:
-   datas['data-vencimento']
-   ?
-   new Date(datas['data-vencimento'])
-   .toLocaleDateString('pt-BR')
-   :
-   '-',
+    ano,
 
 
-   dataAcolhimento:
-   datas['data-acolhimento']
-   ?
-   new Date(datas['data-acolhimento'])
-   .toLocaleDateString('pt-BR')
-   :
-   '-'
+
+    anosDisponiveis:
+
+    ANOS_MEI_PADRAO.map(a=>({
+
+      ano:a,
+
+      bloqueado:false
+
+    })),
+
+
+
+    periodos
+
+
 
   }
 
 
- })
-
-
- return {
-
-  cnpj,
-
-  nome:
-  nomeFinal ||
-  'MICROEMPREENDEDOR INDIVIDUAL',
-
-  ano,
-
-  anosDisponiveis:
-  ANOS_MEI_PADRAO.map(a=>({
-   ano:a,
-   bloqueado:false
-  })),
-
-  periodos
 
  }
 
 
- }
+
 
 
 
 
  /*
-   PADRÃO ANTIGO
+   PADRÃO ANTIGO SERPRO
  */
 
 
+
  const lista =
+
  apiData.listaSituacaoApuracaoMei ||
+
  apiData.situacoesApuracaoInssMei ||
+
+ apiData.situacaoApuracaoInssMei ||
+
  []
 
 
 
- const periodos =
+
+
+
+ const periodos:PeriodoApuracao[] =
+
  Array.isArray(lista)
+
  ?
+
  lista.map((item:any)=>{
 
 
- const detalhe =
- item['resumo-pa-detalhamento']?.[0] || {}
 
+   const detalhe =
 
- const valores =
- detalhe['valores-pa'] || {}
-
-
- const datas =
- detalhe['datas-pa'] || {}
-
-
- const pa =
- String(item.pa||'')
-
-
- const mes =
- Number(pa.substring(4,6))-1
+   item['resumo-pa-detalhamento']?.[0] || {}
 
 
 
- const principal =
- Number(valores['valor-principal'])||0
 
+   const valores =
 
- const multa =
- Number(valores['valor-multa'])||0
-
-
- const juros =
- Number(valores['valor-juros'])||0
+   detalhe['valores-pa'] || {}
 
 
 
- return {
 
- id:`${ano}-${mes+1}`,
+   const datas =
 
- rotulo:
- `${MESES[mes]}/${ano}`,
-
- apurado:
- principal+multa+juros>0,
+   detalhe['datas-pa'] || {}
 
 
- beneficioInss:
- false,
 
 
- principal,
- multa,
- juros,
+   const pa =
+
+   String(item.pa || '')
 
 
- total:
- principal+multa+juros,
 
 
- dataVencimento:
- datas['data-vencimento'] || '-',
+   let mes =
+
+   Number(pa.substring(4,6)) - 1
 
 
- dataAcolhimento:
- datas['data-acolhimento'] || '-'
 
 
- }
+   if(
+
+    Number.isNaN(mes) ||
+
+    mes < 0 ||
+
+    mes > 11
+
+   ){
+
+    mes = 0
+
+   }
+
+
+
+
+
+
+   const principal =
+
+   Number(
+
+    valores['valor-principal']
+
+   ) || 0
+
+
+
+
+
+   const multa =
+
+   Number(
+
+    valores['valor-multa']
+
+   ) || 0
+
+
+
+
+
+   const juros =
+
+   Number(
+
+    valores['valor-juros']
+
+   ) || 0
+
+
+
+
+
+   return {
+
+
+
+    id:
+
+    `${ano}-${String(mes+1).padStart(2,'0')}`,
+
+
+
+
+
+    rotulo:
+
+    `${MESES[mes]}/${ano}`,
+
+
+
+
+
+    apurado:
+
+    principal + multa + juros > 0,
+
+
+
+
+
+    beneficioInss:
+
+    false,
+
+
+
+
+
+    principal,
+
+    multa,
+
+    juros,
+
+
+
+
+
+    total:
+
+    principal + multa + juros,
+
+
+
+
+
+    dataVencimento:
+
+    datas['data-vencimento'] || '-',
+
+
+
+
+
+    dataAcolhimento:
+
+    datas['data-acolhimento'] || '-'
+
+
+
+   }
+
 
 
  })
+
  :
+
  []
 
 
 
+
+
  return {
 
- cnpj,
 
- nome:
- nomeFinal ||
- 'MICROEMPREENDEDOR INDIVIDUAL',
 
- ano,
+  cnpj,
 
- anosDisponiveis:
- ANOS_MEI_PADRAO.map(a=>({
-  ano:a,
-  bloqueado:false
- })),
 
- periodos
+
+  nome:
+
+  nomeFinal ||
+
+  'MICROEMPREENDEDOR INDIVIDUAL',
+
+
+
+
+  ano,
+
+
+
+  anosDisponiveis:
+
+  ANOS_MEI_PADRAO.map(a=>({
+
+    ano:a,
+
+    bloqueado:false
+
+  })),
+
+
+
+  periodos
+
+
 
  }
 
@@ -456,22 +847,22 @@ return {
 
 }
 
-
-
-
-
 export async function consultarDebitos(
  cnpj:string,
- nome:string,
- ano:number
+ nome:string
 ):Promise<ConsultaDebitosResponse>{
 
 
- const anosParaBuscar =
- [
-   ano,
-   ...ANOS_MEI_PADRAO.filter(a=>a!==ano)
+ const anosBusca = [
+  2026,
+  2025,
+  2024,
+  2023,
+  2022,
+  2021,
+  2020
  ]
+
 
 
  let ultimoResultado:ConsultaDebitosResponse = {
@@ -482,13 +873,19 @@ export async function consultarDebitos(
   nome ||
   'MICROEMPREENDEDOR INDIVIDUAL',
 
-  ano,
+  ano:0,
+
 
   anosDisponiveis:
-  ANOS_MEI_PADRAO.map(a=>({
-    ano:a,
-    bloqueado:false
+
+  anosBusca.map(ano=>({
+
+   ano,
+
+   bloqueado:false
+
   })),
+
 
   periodos:[]
 
@@ -496,7 +893,9 @@ export async function consultarDebitos(
 
 
 
- for(const anoBusca of anosParaBuscar){
+
+
+ for(const ano of anosBusca){
 
 
   try{
@@ -504,16 +903,70 @@ export async function consultarDebitos(
 
    console.log(
     '[BUSCANDO ANO]',
-    anoBusca
+    ano
    )
+
 
 
    const resultado =
+
    await consultarAno(
+
     cnpj,
+
     nome,
-    anoBusca
+
+    ano
+
    )
+
+
+
+
+   console.log(
+
+    '[RESULTADO]',
+
+    ano,
+
+    resultado.periodos.length
+
+   )
+
+
+
+
+
+   /*
+      ACHOU DÉBITOS
+      PARA AQUI
+   */
+
+   if(resultado.periodos.length > 0){
+
+
+    return {
+
+     ...resultado,
+
+
+     anosDisponiveis:
+
+     anosBusca.map(a=>({
+
+      ano:a,
+
+      bloqueado:false
+
+     }))
+
+
+    }
+
+
+   }
+
+
 
 
 
@@ -521,33 +974,25 @@ export async function consultarDebitos(
 
 
 
-   if(resultado.periodos.length > 0){
 
+  }catch(error:any){
 
-    console.log(
-     '[ACHOU PERIODOS]',
-     anoBusca,
-     resultado.periodos.length
-    )
-
-
-    return resultado
-
-   }
-
-
-  }
-  catch(error:any){
 
 
    console.error(
-    '[ERRO ANO]',
-    anoBusca,
+
+    '[ERRO CONSULTANDO ANO]',
+
+    ano,
+
     error.message
+
    )
 
 
+
    continue
+
 
 
   }
@@ -555,6 +1000,12 @@ export async function consultarDebitos(
 
  }
 
+
+
+
+ /*
+    nenhum ano possui débito
+ */
 
 
  return ultimoResultado
@@ -563,20 +1014,44 @@ export async function consultarDebitos(
 }
 
 
+
+
+
+
 export function formatBRL(
-valor:number|null
+
+ valor:number|null
+
 ){
 
- if(valor===null || valor===undefined)
- return '-'
+
+ if(
+
+  valor === null ||
+
+  valor === undefined
+
+ ){
+
+  return '-'
+
+ }
+
 
 
  return valor.toLocaleString(
- 'pt-BR',
- {
- style:'currency',
- currency:'BRL'
- }
+
+  'pt-BR',
+
+  {
+
+   style:'currency',
+
+   currency:'BRL'
+
+  }
+
  )
+
 
 }
