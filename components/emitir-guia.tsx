@@ -287,50 +287,51 @@ export function EmitirGuia() {
                     </tr>
                   </thead>
 
-                  <tbody className="bg-white">
-                    {periodos.map((p) => (
-                      <tr
-                        key={p.id}
-                        className={`
-                          h-[27px]
-                          border-b
-                          last:border-b-0
-                          border-[#dddddd]
-                          text-[12px]
-                          text-[#333333]
-                          transition-colors
-                          \${selecionados.has(p.id) ? 'bg-[#fef8e8]' : 'bg-white hover:bg-[#f5f5f5]'}
-                        `}
-                      >
-                        <td className="px-1 py-0 text-center align-middle">
-                          <input
-                            type="checkbox"
-                            className="h-[13px] w-[13px] cursor-pointer disabled:cursor-not-allowed"
-                            disabled={!p.apurado}
-                            checked={selecionados.has(p.id)}
-                            onChange={() => toggleSelecionado(p.id)}
-                          />
-                        </td>
-                        <td className="px-2 py-0 text-left align-middle">{p.rotulo}</td>
-                        <td className="px-2 py-0 text-center align-middle text-[#666666]">{p.apurado ? "Sim" : "Não"}</td>
-                        <td className="px-2 py-0 text-center align-middle">
-                          <input
-                            type="checkbox"
-                            className="h-[13px] w-[13px] cursor-pointer disabled:cursor-not-allowed"
-                            disabled={!p.apurado}
-                            checked={beneficio.has(p.id)}
-                            onChange={() => toggleBeneficio(p.id)}
-                          />
-                        </td>
-                        <td className="px-2 py-0 text-right align-middle pr-4">{(p.principal ?? 0) > 0 ? formatBRL(p.principal) : "-"}</td>
-                        <td className="px-2 py-0 text-right align-middle pr-4">{(p.multa ?? 0) > 0 ? formatBRL(p.multa) : "-"}</td>
-                        <td className="px-2 py-0 text-right align-middle pr-4">{(p.juros ?? 0) > 0 ? formatBRL(p.juros) : "-"}</td>
-                        <td className="px-2 py-0 text-right align-middle pr-4 font-regular">{(p.total ?? 0) > 0 ? formatBRL(p.total) : "-"}</td>
-                        <td className="px-2 py-0 text-center align-middle">{p.dataVencimento ?? "-"}</td>
-                        <td className="px-2 py-0 text-center align-middle">{p.dataAcolhimento ?? "-"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
+                 <tbody className="bg-white">
+  {periodos.map((p) => (
+    <tr
+      key={p.id}
+      className={`
+        h-[27px]
+        border-b
+        last:border-b-0
+        border-[#dddddd]
+        text-[12px]
+        text-[#333333]
+        transition-colors
+        ${selecionados.has(p.id) ? 'bg-[#fef8e8]' : 'bg-white hover:bg-[#f5f5f5]'}
+      `}
+    >
+      <td className="px-1 py-0 text-center align-middle">
+        <input
+          type="checkbox"
+          className="h-[13px] w-[13px] cursor-pointer disabled:cursor-not-allowed"
+          disabled={!p.apurado}
+          checked={selecionados.has(p.id)}
+          onChange={() => toggleSelecionado(p.id)}
+        />
+      </td>
+      <td className="px-2 py-0 text-left align-middle">{p.rotulo}</td>
+      <td className="px-2 py-0 text-center align-middle text-[#666666]">{p.apurado ? "Sim" : "Não"}</td>
+      <td className="px-2 py-0 text-center align-middle">
+        <input
+          type="checkbox"
+          className="h-[13px] w-[13px] cursor-pointer disabled:cursor-not-allowed"
+          disabled={!p.apurado}
+          checked={beneficio.has(p.id)}
+          onChange={() => toggleBeneficio(p.id)}
+        />
+      </td>
+      <td className="px-2 py-0 text-right align-middle pr-4">{(p.principal ?? 0) > 0 ? formatBRL(p.principal) : "-"}</td>
+      <td className="px-2 py-0 text-right align-middle pr-4">{(p.multa ?? 0) > 0 ? formatBRL(p.multa) : "-"}</td>
+      <td className="px-2 py-0 text-right align-middle pr-4">{(p.juros ?? 0) > 0 ? formatBRL(p.juros) : "-"}</td>
+      <td className="px-2 py-0 text-right align-middle pr-4 font-regular">{(p.total ?? 0) > 0 ? formatBRL(p.total) : "-"}</td>
+      <td className="px-2 py-0 text-center align-middle">{p.dataVencimento ?? "-"}</td>
+      <td className="px-2 py-0 text-center align-middle">{p.dataAcolhimento ?? "-"}</td>
+    </tr>
+  ))}
+</tbody>
+
                 </table>
               </div>
             )}
