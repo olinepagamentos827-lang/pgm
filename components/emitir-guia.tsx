@@ -156,65 +156,60 @@ export function EmitirGuia() {
             Informe o Ano-Calendário:
           </label>
 
-          <select
-            id="ano"
-            value={anoSelect}
-            onChange={(e) => setAnoSelect(e.target.value)}
-            className="
-              h-[28px]
-              w-[80px]
-              cursor-pointer
-              rounded-[4px]
-              border
-              border-[#c8c8c8]
-              bg-[linear-gradient(to_bottom,#ffffff_0%,#f1f1f1_55%,#dddddd_100%)]
-              px-2
-              py-0
-              text-[13px]
-              text-neutral-800
-              shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(0,0,0,0.12)]
-              outline-none
-              transition-all
-              duration-75
-              active:scale-[0.98]
-              focus:scale-[0.98]
-              sm:w-auto
-            "
-          >
-            <option value="">&nbsp;</option>
-            {data?.anosDisponiveis?.map((item)=>(
-  <option
-    key={item.ano}
-    value={item.ano}
-    disabled={item.bloqueado}
-  >
-    {item.ano}
-    {item.bloqueado ? ' Não optante' : ''}
-  </option>
-))}
+         <select
+  id="ano"
+  value={anoSelect}
+  onChange={(e) => setAnoSelect(e.target.value)}
+  className="
+    h-[28px]
+    w-[80px]
+    cursor-pointer
+    rounded-[4px]
+    border
+    border-[#c8c8c8]
+    bg-[linear-gradient(to_bottom,#ffffff_0%,#f1f1f1_55%,#dddddd_100%)]
+    px-2
+    py-0
+    text-[13px]
+    text-neutral-800
+    shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(0,0,0,0.12)]
+    outline-none
+  "
+>
+  <option value="">&nbsp;</option>
 
-          <button
-            type="button"
-            onClick={handleConsultar}
-            className="
-              h-[28px]
-              cursor-pointer
-              rounded-[4px]
-              border
-              border-[#398439]
-              bg-[linear-gradient(to_bottom,#55b355_0%,#48a348_100%)]
-              px-2
-              text-[13px]
-              font-medium
-              text-white
-              shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_1px_2px_rgba(0,0,0,0.18)]
-              transition-all
-              hover:brightness-105
-              active:scale-[0.98]
-            "
-          >
-            Ok
-          </button>
+  {data?.anosDisponiveis?.map((item)=>(
+    <option
+      key={item.ano}
+      value={item.ano}
+      disabled={item.bloqueado}
+    >
+      {item.ano}
+      {item.bloqueado ? ' Não optante' : ''}
+    </option>
+  ))}
+
+</select>
+
+
+<button
+  type="button"
+  onClick={handleConsultar}
+  className="
+    h-[28px]
+    cursor-pointer
+    rounded-[4px]
+    border
+    border-[#398439]
+    bg-[linear-gradient(to_bottom,#55b355_0%,#48a348_100%)]
+    px-2
+    text-[13px]
+    font-medium
+    text-white
+  "
+>
+  Ok
+</button>
         </div>
 
         {/* CONTEÚDO APÓS CONSULTA */}
