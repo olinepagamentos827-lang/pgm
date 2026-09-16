@@ -107,7 +107,7 @@ async function consultarAno(
       let mes = Number(pa.substring(4, 6)) - 1
       if (Number.isNaN(mes) || mes < 0 || mes > 11) mes = 0
 
-      const detalhe = item['resumo-pa-detalhamento']?..[0] || {}
+      const detalhe = item['resumo-pa-detalhamento']?.[0] || {}
       const valores = detalhe['valores-pa'] || {}
       const datas = detalhe['datas-pa'] || {}
 
