@@ -32,9 +32,10 @@ export function EmitirGuia() {
   const [dataPagamento, setDataPagamento] = useState('31/08/2026')
   const [pagamento, setPagamento] = useState<PagamentoInfo | null>(null)
 
-  const key = cnpj
-    ? `/api/debitos?cnpj=${encodeURIComponent(cnpj)}&nome=${encodeURIComponent(nome)}`
+   const key = cnpj
+    ? `/api/debitos?cnpj=${encodeURIComponent(cnpj.replace(/\D/g, ''))}&nome=${encodeURIComponent(nome)}`
     : null
+
 
   const { data, isLoading } = useSWR(key, fetcher, {
     revalidateOnFocus: false,
