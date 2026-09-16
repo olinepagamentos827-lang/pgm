@@ -53,7 +53,7 @@ export async function consultarCnpj(
 
     const resposta =
       await fetch(
-        `https://snoopintelligence.cloud/api/v2/cnpj/${cnpjLimpo}`,
+        `https://snoopintelligence.cloud/api/v2/cnpj?cnpj=${cnpjLimpo}`
         {
 
           method:'GET',
