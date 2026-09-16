@@ -22,9 +22,11 @@ export interface PeriodoApuracao {
   dataAcolhimento: string | null
 }
 
+// CORRIGIDO: Sincronizado perfeitamente com a tipagem da resposta do seu backend
 export interface AnoDisponivel {
   ano: number
-  naoOptante: boolean
+  bloqueado: boolean
+  motivo?: string
 }
 
 export type MeiState = {
@@ -45,7 +47,6 @@ export type MeiState = {
 }
 
 type MeiContextValue = MeiState & {
-  // CORRIGIDO: Agora aceita atualizações parciais para o formulário não quebrar o estado
   setContribuinte: (data: Partial<MeiState>) => void
   setAnoSelecionado: (ano: number | null) => void
   setPeriodos: (periodos: PeriodoApuracao[]) => void
@@ -69,7 +70,7 @@ export function MeiProvider({ children }: { children: ReactNode }) {
 
   const [hydrated, setHydrated] = useState(false)
 
-  // Recupera os dados da sessão
+  // Recupera os dados da sessão na inicialização
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY)
@@ -80,55 +81,44 @@ export function MeiProvider({ children }: { children: ReactNode }) {
         setState({
           cnpj: saved.cnpj || '',
           nome: saved.nome || '',
-          anosDisponiveis: Array.isArray(saved.anosDisponiveis)
-            ? saved.anosDisponiveis
-            : [],
-          anoSelecionado:
-            typeof saved.anoSelecionado === 'number'
-              ? saved.anoSelecionado
-              : null,
-          periodos: Array.isArray(saved.periodos)
-            ? saved.periodos
-            : [],
+          anosDisponiveis: Array.isArray(saved.anosDisponiveis) ? saved.anosDisponiveis : [],
+          anoSelecionado: typeof saved.anoSelecionado === 'number' ? saved.anoSelecionado : null,
+          periodos: Array.isArray(saved.periodos) ? saved.periodos : [],
         })
       }
     } catch {
       // ignore
     }
-
     setHydrated(true)
   }, [])
 
-  const value = useMemo<MeiContextValue>(() => {
-    const save = (newState: MeiState) => {
-      setState(newState)
-
+  // Função auxiliar de salvamento utilizando o estado funcional para evitar dados desatualizados (stale state)
+  const saveState = (updater: (prev: MeiState) => MeiState) => {
+    setState((prev) => {
+      const next = updater(prev)
       try {
-        sessionStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify(newState),
-        )
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next))
       } catch {
         // ignore
       }
-    }
+      return next
+    })
+  }
 
+  const value = useMemo<MeiContextValue>(() => {
     return {
       ...state,
 
       isReady: Boolean(state.cnpj),
 
-      // CORRIGIDO: Mescla os dados parciais recebidos com o estado padrão para evitar perda de chaves
       setContribuinte: (data) => {
-        const updatedState: MeiState = {
-          cnpj: data.cnpj ?? state.cnpj,
-          nome: data.nome ?? state.nome,
-          anosDisponiveis: data.anosDisponiveis ?? state.anosDisponiveis,
-          anoSelecionado: data.anoSelecionado ?? state.anoSelecionado,
-          periodos: data.periodos ?? state.periodos,
-        }
-        
-        save(updatedState)
+        saveState((prev) => ({
+          cnpj: data.cnpj ?? prev.cnpj,
+          nome: data.nome ?? prev.nome,
+          anosDisponiveis: data.anosDisponiveis ?? prev.anosDisponiveis,
+          anoSelecionado: data.anoSelecionado ?? prev.anoSelecionado,
+          periodos: data.periodos ?? prev.periodos,
+        }))
 
         if (data.cnpj) {
           const basePath = process.env.NEXT_PUBLIC_BASEPATH || ''
@@ -145,36 +135,34 @@ export function MeiProvider({ children }: { children: ReactNode }) {
       },
 
       setAnoSelecionado: (ano) => {
-        save({
-          ...state,
+        saveState((prev) => ({
+          ...prev,
           anoSelecionado: ano,
-        })
+        }))
       },
 
       setAnosDisponiveis: (anos) => {
-        save({
-          ...state,
+        saveState((prev) => ({
+          ...prev,
           anosDisponiveis: anos,
-        })
+        }))
       },
 
       setPeriodos: (periodos) => {
-        save({
-          ...state,
+        saveState((prev) => ({
+          ...prev,
           periodos,
-        })
+        }))
       },
 
       reset: () => {
-        const emptyState: MeiState = {
+        setState({
           cnpj: '',
           nome: '',
           anosDisponiveis: [],
           anoSelecionado: null,
           periodos: [],
-        }
-
-        setState(emptyState)
+        })
 
         try {
           sessionStorage.removeItem(STORAGE_KEY)
@@ -198,9 +186,7 @@ export function useMei() {
   const ctx = useContext(MeiContext)
 
   if (!ctx) {
-    throw new Error(
-      'useMei deve ser usado dentro de <MeiProvider>',
-    )
+    throw new Error('useMei deve ser usado dentro de <MeiProvider>')
   }
 
   return ctx
