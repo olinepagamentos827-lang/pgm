@@ -188,7 +188,7 @@ export async function consultarDebitos(
   let anosBusca = [...ANOS_MEI_PADRAO]
   let nomeContribuinte = nome || 'MICROEMPREENDEDOR INDIVIDUAL'
   
-  // 1. Otimização Inteligente: Consulta os dados cadastrais prévios para evitar requisições inúteis
+  // 1. Consulta cadastral inteligente para reduzir o número de requisições
   try {
     const dadosEmpresa = await consultarCnpj(cnpj)
     if (dadosEmpresa.razaoSocial) nomeContribuinte = dadosEmpresa.razaoSocial
@@ -196,68 +196,72 @@ export async function consultarDebitos(
     const anoAbertura = dadosEmpresa.dataAbertura ? new Date(dadosEmpresa.dataAbertura).getFullYear() : null
     const anoBaixa = dadosEmpresa.situacao === 'BAIXADA' && dadosEmpresa.dataSituacao ? new Date(dadosEmpresa.dataSituacao).getFullYear() : null
 
-    // Filtra o array de anos para pesquisar somente o período em que a empresa de fato existiu
     anosBusca = ANOS_MEI_PADRAO.filter(ano => {
-      if (anoAbertura && ano < anoAbertura) return false // Ignora anos anteriores à abertura
-      if (anoBaixa && ano > anoBaixa) return false // Ignora anos posteriores à baixa
+      if (anoAbertura && ano < anoAbertura) return false
+      if (anoBaixa && ano > anoBaixa) return false
       return true
     })
   } catch (err) {
     console.log('[DEBUG FILTRO ANOS ERRO]', err)
   }
 
-  // Se o filtro resultar vazio, redefine para varredura padrão segura
   if (anosBusca.length === 0) anosBusca = [...ANOS_MEI_PADRAO]
-
-  // 2. Consulta paralela controlada para evitar estouro de sockets do fetch
-  const promessas = anosBusca.map(ano => consultarAno(cnpj, nomeContribuinte, ano))
-  const resultados = await Promise.allSettled(promessas)
 
   const todosPeriodos: PeriodoApuracao[] = []
   const mapaAnosDisponiveis = new Map<number, AnoDisponivel>()
 
-  // Inicializa o mapa com o estado padrão
   ANOS_MEI_PADRAO.forEach(ano => {
     mapaAnosDisponiveis.set(ano, { ano, bloqueado: false })
   })
 
-  // 3. Consolidando os dados retornados
-  for (const resultado of resultados) {
-    if (resultado.status === 'fulfilled') {
-      const respostaAno = resultado.value
+  // Função auxiliar para dar um respiro (delay) entre as chamadas e evitar Rate Limit
+  const esperar = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+  // 2. Executa as requisições de forma sequencial controlada para não ativar o firewall
+  for (const ano of anosBusca) {
+    try {
+      console.log(`[FILA CONTROLADA] Buscando ano: ${ano}`)
+      const respostaAno = await consultarAno(cnpj, nomeContribuinte, ano)
 
       if (respostaAno.nome && respostaAno.nome !== 'MICROEMPREENDEDOR INDIVIDUAL') {
         nomeContribuinte = respostaAno.nome
       }
 
-      // Adiciona os períodos encontrados
       if (respostaAno.periodos && respostaAno.periodos.length > 0) {
         todosPeriodos.push(...respostaAno.periodos)
       }
 
-      // Copia as informações de bloqueios/mensagens encontradas para o mapa consolidado
       respostaAno.anosDisponiveis.forEach(statusAno => {
         if (statusAno.bloqueado) {
           mapaAnosDisponiveis.set(statusAno.ano, statusAno)
         }
       })
-    } else {
-      // Caso a requisição tenha sofrido rejeição crítica (Timeout / Fetch Failed)
-      console.error('[PROMISSE REJECTED]', resultado.reason)
+
+      // Adiciona um pequeno intervalo de 250ms antes de pedir o próximo ano ao servidor
+      await esperar(250)
+
+    } catch (error: any) {
+      console.error(`[ERRO INDIVIDUAL ANO ${ano}]:`, error.message)
+      // Se um ano der timeout, marca como bloqueado por falha temporária
+      mapaAnosDisponiveis.set(ano, { 
+        ano, 
+        bloqueado: true, 
+        motivo: 'Instabilidade temporária no validador. Tente novamente.' 
+      })
     }
   }
 
-  // Ordena os débitos dos meses mais recentes para os mais antigos
   todosPeriodos.sort((a, b) => b.id.localeCompare(a.id))
 
   return {
     cnpj,
     nome: nomeContribuinte,
-    ano: anosBusca[0] || ANOS_MEI_PADRAO[0], 
+    ano: anosBusca[0] || 2026, 
     anosDisponiveis: Array.from(mapaAnosDisponiveis.values()),
     periodos: todosPeriodos
   }
 }
+
 
 export function formatBRL(valor: number | null) {
   if (valor === null || valor === undefined) return '-'
