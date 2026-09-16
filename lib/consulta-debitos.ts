@@ -93,7 +93,7 @@ const resposta = await fetch(
   url,
   {
     cache:'no-store',
-    signal:AbortSignal.timeout(20000),
+    signal:AbortSignal.timeout(60000),
     headers:{
       Accept:'application/json',
       'User-Agent':'Mozilla/5.0'
