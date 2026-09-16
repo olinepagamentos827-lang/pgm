@@ -86,38 +86,39 @@ async function consultarAno(
   }
 
   /* 
-    TRATAMENTO DE ERROS DO SERPRO
+    TRATAMENTO DE ERROS DO SERPRO INDIVIDUAL DO ANO
   */
   if (apiData['mensagem-erro'] || apiData.mensagemErro) {
     const erroObj = apiData['mensagem-erro'] || apiData.mensagemErro
     console.log('[DEBUG SERPRO MSG]', erroObj)
     const textoErro = erroObj.texto || ''
 
-    // Se exige a DASN, a empresa existia no ano! DEVE FICAR SELECIONÁVEL E CLICÁVEL
+    // Se exige a DASN anterior, a empresa existia e tem débitos/pendências. FICA CLICÁVEL!
     if (textoErro.includes('Antes de prosseguir') || textoErro.includes('DASN-Simei')) {
       return {
         cnpj,
-        nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
+        nome: nomeFinal,
         ano,
         anosDisponiveis: [
           {
             ano,
-            bloqueado: false
+            bloqueado: false, // 👈 Destrava e deixa clicável para o usuário acessar os débitos
+            motivo: undefined
           }
         ],
         periodos: []
       }
     }
 
-    // Se o erro indicar que a empresa não era optante real ou está baixada (como 2021, 2022 ou 2026)
+    // Se o erro indicar não optante ou baixada de fato
     return {
       cnpj,
-      nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
+      nome: nomeFinal,
       ano,
       anosDisponiveis: [
         {
           ano,
-          bloqueado: true,
+          bloqueado: true, // 👈 Bloqueia e deixa não clicável
           motivo: 'Não optante'
         }
       ],
@@ -169,7 +170,7 @@ async function consultarAno(
 
     return {
       cnpj,
-      nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
+      nome: nomeFinal,
       ano,
       anosDisponiveis: [
         {
@@ -214,7 +215,7 @@ async function consultarAno(
 
   return {
     cnpj,
-    nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
+    nome: nomeFinal,
     ano,
     anosDisponiveis: [
       {
@@ -232,9 +233,12 @@ export async function consultarDebitos(
 ): Promise<ConsultaDebitosResponse> {
   let nomeContribuinte = nome || 'MICROEMPREENDEDOR INDIVIDUAL'
 
+  // Busca cadastral para recuperar a Razão Social real corporativa
   try {
     const dadosEmpresa = await consultarCnpj(cnpj)
-    if (dadosEmpresa.razaoSocial) nomeContribuinte = dadosEmpresa.razaoSocial
+    if (dadosEmpresa.razaoSocial) {
+      nomeContribuinte = dadosEmpresa.razaoSocial
+    }
   } catch (err) {
     console.log('[DEBUG NOME CATCH]', err)
   }
@@ -242,7 +246,8 @@ export async function consultarDebitos(
   const todosPeriodos: PeriodoApuracao[] = []
   const mapaAnosDisponiveis = new Map<number, AnoDisponivel>()
 
-  const escopoAnos = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
+  // Escopo fixo imutável de 2021 a 2026 para corresponder exatamente à sua imagem de referência
+  const escopoAnos = [2021, 2022, 2023, 2024, 2025, 2026]
 
   escopoAnos.forEach(ano => {
     mapaAnosDisponiveis.set(ano, { ano, bloqueado: false })
@@ -250,6 +255,7 @@ export async function consultarDebitos(
 
   const esperar = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
+  // Varre sequencialmente o escopo controlado do PGMEI
   for (const ano of escopoAnos) {
     try {
       console.log(`[FILA CONTROLADA] Buscando ano: ${ano}`)
@@ -263,6 +269,7 @@ export async function consultarDebitos(
         todosPeriodos.push(...respostaAno.periodos)
       }
 
+      // Aplica as regras de travas retornadas de cada ano individual consultado no Serpro
       respostaAno.anosDisponiveis.forEach(statusAno => {
         mapaAnosDisponiveis.set(statusAno.ano, {
           ano: statusAno.ano,
@@ -282,28 +289,13 @@ export async function consultarDebitos(
     await esperar(250)
   }
 
-  // Sincroniza e garante o travamento estável dos anos não consultados ou com erro bruto
-  escopoAnos.forEach(ano => {
-    const dadosAno = mapaAnosDisponiveis.get(ano)
-    if (dadosAno && dadosAno.bloqueado && !dadosAno.motivo) {
-      mapaAnosDisponiveis.set(ano, {
-        ano,
-        bloqueado: true,
-        motivo: 'Não optante'
-      })
-    }
-  })
-
   todosPeriodos.sort((a, b) => b.id.localeCompare(a.id))
-
-  // Envia a lista ordenada de forma crescente para corresponder à sua foto (2021 a 2026)
-  const anosOrdenadosCrescente = [2021, 2022, 2023, 2024, 2025, 2026]
 
   return {
     cnpj,
     nome: nomeContribuinte,
-    ano: anosOrdenadosCrescente, 
-    anosDisponiveis: anosOrdenadosCrescente.map(ano => {
+    ano: escopoAnos, 
+    anosDisponiveis: escopoAnos.map(ano => {
       const dadosAno = mapaAnosDisponiveis.get(ano)
       return {
         ano,
