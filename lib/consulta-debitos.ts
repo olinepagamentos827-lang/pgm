@@ -34,6 +34,7 @@ const MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ]
 
+// CORREÇÃO CRÍTICA: Array de escopo fixado explicitamente para não gerar quebras de lote na URL
 const ANOS_MEI_PADRAO = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
 async function consultarAno(
@@ -86,7 +87,7 @@ async function consultarAno(
   }
 
   /* 
-    TRATAMENTO DE ERROS DO SERPRO INDIVIDUAL DO ANO
+    TRATAMENTO DE RETORNOS DE ERRO/AVISO DO SERPRO
   */
   if (apiData['mensagem-erro'] || apiData.mensagemErro) {
     const erroObj = apiData['mensagem-erro'] || apiData.mensagemErro
@@ -102,15 +103,14 @@ async function consultarAno(
         anosDisponiveis: [
           {
             ano,
-            bloqueado: false, // 👈 Destrava e deixa clicável para o usuário acessar os débitos
-            motivo: undefined
+            bloqueado: false
           }
         ],
         periodos: []
       }
     }
 
-    // Se o erro indicar não optante ou baixada de fato
+    // Se o erro indicar que a empresa não era optante real ou está baixada (como 2021, 2022 ou 2026)
     return {
       cnpj,
       nome: nomeFinal,
@@ -118,7 +118,7 @@ async function consultarAno(
       anosDisponiveis: [
         {
           ano,
-          bloqueado: true, // 👈 Bloqueia e deixa não clicável
+          bloqueado: true,
           motivo: 'Não optante'
         }
       ],
@@ -233,7 +233,6 @@ export async function consultarDebitos(
 ): Promise<ConsultaDebitosResponse> {
   let nomeContribuinte = nome || 'MICROEMPREENDEDOR INDIVIDUAL'
 
-  // Busca cadastral para recuperar a Razão Social real corporativa
   try {
     const dadosEmpresa = await consultarCnpj(cnpj)
     if (dadosEmpresa.razaoSocial) {
@@ -246,7 +245,6 @@ export async function consultarDebitos(
   const todosPeriodos: PeriodoApuracao[] = []
   const mapaAnosDisponiveis = new Map<number, AnoDisponivel>()
 
-  // Escopo fixo imutável de 2021 a 2026 para corresponder exatamente à sua imagem de referência
   const escopoAnos = [2021, 2022, 2023, 2024, 2025, 2026]
 
   escopoAnos.forEach(ano => {
@@ -255,7 +253,6 @@ export async function consultarDebitos(
 
   const esperar = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-  // Varre sequencialmente o escopo controlado do PGMEI
   for (const ano of escopoAnos) {
     try {
       console.log(`[FILA CONTROLADA] Buscando ano: ${ano}`)
@@ -269,7 +266,6 @@ export async function consultarDebitos(
         todosPeriodos.push(...respostaAno.periodos)
       }
 
-      // Aplica as regras de travas retornadas de cada ano individual consultado no Serpro
       respostaAno.anosDisponiveis.forEach(statusAno => {
         mapaAnosDisponiveis.set(statusAno.ano, {
           ano: statusAno.ano,
@@ -289,13 +285,26 @@ export async function consultarDebitos(
     await esperar(250)
   }
 
+  escopoAnos.forEach(ano => {
+    const dadosAno = mapaAnosDisponiveis.get(ano)
+    if (dadosAno && dadosAno.bloqueado && !dadosAno.motivo) {
+      mapaAnosDisponiveis.set(ano, {
+        ano,
+        bloqueado: true,
+        motivo: 'Não optante'
+      })
+    }
+  })
+
   todosPeriodos.sort((a, b) => b.id.localeCompare(a.id))
+
+  const anosOrdenadosCrescente = [2021, 2022, 2023, 2024, 2025, 2026]
 
   return {
     cnpj,
     nome: nomeContribuinte,
-    ano: escopoAnos, 
-    anosDisponiveis: escopoAnos.map(ano => {
+    ano: anosOrdenadosCrescente, 
+    anosDisponiveis: anosOrdenadosCrescente.map(ano => {
       const dadosAno = mapaAnosDisponiveis.get(ano)
       return {
         ano,
