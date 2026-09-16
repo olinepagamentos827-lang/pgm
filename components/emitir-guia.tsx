@@ -33,9 +33,10 @@ export function EmitirGuia() {
   const [dataPagamento, setDataPagamento] = useState('31/08/2026')
   const [pagamento, setPagamento] = useState<PagamentoInfo | null>(null)
 
-  const key = cnpj
-    ? `/api/debitos?cnpj=${encodeURIComponent(cnpj.replace(/\D/g, ''))}`
+   const key = cnpj
+    ? `/SimplesNacional/Aplicacoes/ATSPO/pgmei.app/api/debitos?cnpj=${encodeURIComponent(cnpj.replace(/\D/g, ''))}`
     : null
+
 
   // CORREÇÃO: Alimenta o Context Provider assim que a rota responde 200 com sucesso
   const { data, isLoading } = useSWR(key, fetcher, {
