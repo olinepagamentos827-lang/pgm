@@ -34,7 +34,6 @@ const MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ]
 
-// CORREÇÃO DEFINTIVA: Array de anos restabelecido e preenchido de forma imutável
 const ANOS_MEI_PADRAO = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
 async function consultarAno(
@@ -98,7 +97,7 @@ async function consultarAno(
     if (textoErro.includes('Antes de prosseguir') || textoErro.includes('DASN-Simei')) {
       return {
         cnpj,
-        nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
+        nome: nomeFinal,
         ano,
         anosDisponiveis: [
           {
@@ -113,7 +112,7 @@ async function consultarAno(
     // Se o erro indicar que a empresa não era optante real ou está baixada (como 2021, 2022 ou 2026)
     return {
       cnpj,
-      nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
+      nome: nomeFinal,
       ano,
       anosDisponiveis: [
         {
@@ -170,7 +169,7 @@ async function consultarAno(
 
     return {
       cnpj,
-      nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
+      nome: nomeFinal,
       ano,
       anosDisponiveis: [
         {
@@ -215,7 +214,7 @@ async function consultarAno(
 
   return {
     cnpj,
-    nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
+    nome: nomeFinal,
     ano,
     anosDisponiveis: [
       {
@@ -248,7 +247,10 @@ export async function consultarDebitos(
   const escopoAnos = [2021, 2022, 2023, 2024, 2025, 2026]
 
   escopoAnos.forEach(ano => {
-    mapaAnosDisponiveis.set(ano, { ano, bloqueado: false })
+    mapaAnosDisponiveis.set(ano, { 
+      ano, 
+      bloqueado: false 
+    })
   })
 
   const esperar = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -282,7 +284,8 @@ export async function consultarDebitos(
         motivo: 'Não optante' 
       })
     }
-    await appraisal(250)
+    // CORRIGIDO: Voltou a ser esperar(250)!
+    await esperar(250)
   }
 
   escopoAnos.forEach(ano => {
