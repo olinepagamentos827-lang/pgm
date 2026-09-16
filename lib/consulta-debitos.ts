@@ -107,23 +107,39 @@ async function consultarAno(
   }
 
 
-  /* PADRÃO NOVO SERPRO */
+   /* PADRÃO NOVO SERPRO - resumo-pa */
   const listaResumo = apiData['resumo-pa'] || apiData.resumoPa || []
 
   if (Array.isArray(listaResumo)) {
     const periodos: PeriodoApuracao[] = listaResumo.map((item: any) => {
       const pa = String(item.pa || '')
       let mes = Number(pa.substring(4, 6)) - 1
-      if (Number.isNaN(mes) || mes < 0 || mes > 11) mes = 0
+
+      if (Number.isNaN(mes) || mes < 0 || mes > 11) {
+        mes = 0
+      }
 
       const detalhe = item['resumo-pa-detalhamento']?.[0] || {}
+      
+      // Correção protetiva: garante objeto vazio estável se a propriedade vier explícita como null do órgão
       const valores = detalhe['valores-pa'] || {}
       const datas = detalhe['datas-pa'] || {}
 
-      const principal = Number(valores['valor-principal']) || 0
-      const multa = Number(valores['valor-multa']) || 0
-      const juros = Number(valores['valor-juros']) || 0
-      const total = Number(valores['valor-total']) || (principal + multa + juros)
+      const principal = valores ? (Number(valores['valor-principal']) || 0) : 0
+      const multa = valores ? (Number(valores['valor-multa']) || 0) : 0
+      const juros = valores ? (Number(valores['valor-juros']) || 0) : 0
+      const total = valores ? (Number(valores['valor-total']) || (principal + multa + juros)) : 0
+
+      // Garante string estável caso datas-pa seja nulo (comum em meses Não Optantes)
+      let dataVencimentoFormata = '-'
+      if (datas && datas['data-vencimento']) {
+        dataVencimentoFormata = new Date(datas['data-vencimento']).toLocaleDateString('pt-BR')
+      }
+
+      let dataAcolhimentoFormata = '-'
+      if (datas && datas['data-acolhimento']) {
+        dataAcolhimentoFormata = new Date(datas['data-acolhimento']).toLocaleDateString('pt-BR')
+      }
 
       return {
         id: `${ano}-${String(mes + 1).padStart(2, '0')}`,
@@ -134,8 +150,8 @@ async function consultarAno(
         multa,
         juros,
         total,
-        dataVencimento: datas['data-vencimento'] ? new Date(datas['data-vencimento']).toLocaleDateString('pt-BR') : '-',
-        dataAcolhimento: datas['data-acolhimento'] ? new Date(datas['data-acolhimento']).toLocaleDateString('pt-BR') : '-'
+        dataVencimento: dataVencimentoFormata,
+        dataAcolhimento: dataAcolhimentoFormata
       }
     })
 
@@ -143,7 +159,10 @@ async function consultarAno(
       cnpj,
       nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
       ano,
-      anosDisponiveis: ANOS_MEI_PADRAO.map(a => ({ ano: a, bloqueado: false })),
+      anosDisponiveis: ANOS_MEI_PADRAO.map(a => ({
+        ano: a,
+        bloqueado: false
+      })),
       periodos
     }
   }
