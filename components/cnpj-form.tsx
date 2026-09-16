@@ -86,7 +86,7 @@ export function CnpjForm() {
           />
         </div>
 
-        <div className="mb-6 text-[#555] text-[11px] leading-tight font-normal">
+        <div className="mb-6 text-[#555] text-[10px] leading-tight font-normal">
           <span className="font-bold text-[#555]">Protegido por hCaptcha</span> <br />
           <a href="https://hcaptcha.com" className="text-[#337AB7] hover:underline">Privacidade</a> e{" "}
           <a href="https://hcaptcha.com" className="text-[#337AB7] hover:underline">Termos e condições</a>.
