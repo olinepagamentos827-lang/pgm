@@ -467,83 +467,100 @@ export async function consultarDebitos(
 ):Promise<ConsultaDebitosResponse>{
 
 
- try{
+ const anosParaBuscar =
+ [
+   ano,
+   ...ANOS_MEI_PADRAO.filter(a=>a!==ano)
+ ]
 
 
-  const resultado =
-  await consultarAno(
-   cnpj,
-   nome,
-   ano
-  )
+ let ultimoResultado:ConsultaDebitosResponse = {
 
+  cnpj,
 
+  nome:
+  nome ||
+  'MICROEMPREENDEDOR INDIVIDUAL',
 
-  if(resultado.periodos.length){
+  ano,
 
-   return resultado
+  anosDisponiveis:
+  ANOS_MEI_PADRAO.map(a=>({
+    ano:a,
+    bloqueado:false
+  })),
 
-  }
-
-
-
-  /*
-    procura anos anteriores
-  */
-
-
-  for(const antigo of ANOS_MEI_PADRAO){
-
-
-   if(antigo===ano)
-    continue
-
-
-
-   const r =
-   await consultarAno(
-    cnpj,
-    resultado.nome,
-    antigo
-   )
-
-
-
-   if(r.periodos.length){
-
-    return r
-
-   }
-
-  }
-
-
-
-return {
- ...resultado,
- anosDisponiveis:
- ANOS_MEI_PADRAO.map(a=>({
-  ano:a,
-  bloqueado:false
- }))
-}
-
-
-
- }catch(error){
-
- console.error(
- '[ERRO CONSULTA DEBITOS]',
- error
- )
-
- throw error
+  periodos:[]
 
  }
 
 
-}
 
+ for(const anoBusca of anosParaBuscar){
+
+
+  try{
+
+
+   console.log(
+    '[BUSCANDO ANO]',
+    anoBusca
+   )
+
+
+   const resultado =
+   await consultarAno(
+    cnpj,
+    nome,
+    anoBusca
+   )
+
+
+
+   ultimoResultado = resultado
+
+
+
+   if(resultado.periodos.length > 0){
+
+
+    console.log(
+     '[ACHOU PERIODOS]',
+     anoBusca,
+     resultado.periodos.length
+    )
+
+
+    return resultado
+
+   }
+
+
+  }
+  catch(error:any){
+
+
+   console.error(
+    '[ERRO ANO]',
+    anoBusca,
+    error.message
+   )
+
+
+   continue
+
+
+  }
+
+
+ }
+
+
+
+ return ultimoResultado
+
+
+}
 
 
 export function formatBRL(
