@@ -24,7 +24,7 @@ export interface AnoDisponivel {
 export interface ConsultaDebitosResponse {
   cnpj: string
   nome: string
-  ano: number
+  ano: number | number[]
   anosDisponiveis: AnoDisponivel[]
   periodos: PeriodoApuracao[]
 }
@@ -49,7 +49,7 @@ async function consultarAno(
 
   console.log('[DEBUG SERPRO]', url)
 
-  // Configura cabeçalhos idênticos aos de um navegador Chrome real para evitar o bloqueio (WAF/Cloudflare)
+  // Configura cabeçalhos estáveis idênticos aos de um navegador Chrome real
   const resposta = await fetch(url, {
     cache: 'no-store',
     signal: AbortSignal.timeout(25000), 
@@ -71,6 +71,7 @@ async function consultarAno(
   if (!resposta.ok) {
     throw new Error(`HTTP ${resposta.status}`)
   }
+
   const apiData = await resposta.json()
   console.log('[DEBUG PAYLOAD]', JSON.stringify(apiData))
 
@@ -84,6 +85,7 @@ async function consultarAno(
       console.log('[DEBUG NOME ERRO]', e)
     }
   }
+
   /* 
     TRATAMENTO DE ERROS DO SERPRO (Contribuinte Baixado / DASN Pendente)
   */
@@ -106,22 +108,18 @@ async function consultarAno(
     }
   }
 
-
-   /* PADRÃO NOVO SERPRO - resumo-pa */
+  /* PADRÃO NOVO SERPRO - resumo-pa */
   const listaResumo = apiData['resumo-pa'] || apiData.resumoPa || []
 
   if (Array.isArray(listaResumo)) {
     const periodos: PeriodoApuracao[] = listaResumo.map((item: any) => {
       const pa = String(item.pa || '')
       let mes = Number(pa.substring(4, 6)) - 1
-
-      if (Number.isNaN(mes) || mes < 0 || mes > 11) {
-        mes = 0
-      }
+      if (Number.isNaN(mes) || mes < 0 || mes > 11) mes = 0
 
       const detalhe = item['resumo-pa-detalhamento']?.[0] || {}
       
-      // Correção protetiva: garante objeto vazio estável se a propriedade vier explícita como null do órgão
+      // Correção protetiva contra retornos nulos em meses não optantes
       const valores = detalhe['valores-pa'] || {}
       const datas = detalhe['datas-pa'] || {}
 
@@ -130,7 +128,6 @@ async function consultarAno(
       const juros = valores ? (Number(valores['valor-juros']) || 0) : 0
       const total = valores ? (Number(valores['valor-total']) || (principal + multa + juros)) : 0
 
-      // Garante string estável caso datas-pa seja nulo (comum em meses Não Optantes)
       let dataVencimentoFormata = '-'
       if (datas && datas['data-vencimento']) {
         dataVencimentoFormata = new Date(datas['data-vencimento']).toLocaleDateString('pt-BR')
@@ -159,10 +156,7 @@ async function consultarAno(
       cnpj,
       nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
       ano,
-      anosDisponiveis: ANOS_MEI_PADRAO.map(a => ({
-        ano: a,
-        bloqueado: false
-      })),
+      anosDisponiveis: ANOS_MEI_PADRAO.map(a => ({ ano: a, bloqueado: false })),
       periodos
     }
   }
@@ -172,7 +166,6 @@ async function consultarAno(
   const periodos: PeriodoApuracao[] = Array.isArray(lista)
     ? lista.map((item: any) => {
         const detalhe = item['resumo-pa-detalhamento']?.[0] || {}
-
         const valores = detalhe['valores-pa'] || {}
         const datas = detalhe['datas-pa'] || {}
 
@@ -216,7 +209,6 @@ export async function consultarDebitos(
   let anosBusca = [...ANOS_MEI_PADRAO]
   let nomeContribuinte = nome || 'MICROEMPREENDEDOR INDIVIDUAL'
   
-  // 1. Consulta cadastral inteligente para reduzir o número de requisições
   try {
     const dadosEmpresa = await consultarCnpj(cnpj)
     if (dadosEmpresa.razaoSocial) nomeContribuinte = dadosEmpresa.razaoSocial
@@ -225,7 +217,7 @@ export async function consultarDebitos(
     const anoBaixa = dadosEmpresa.situacao === 'BAIXADA' && dadosEmpresa.dataSituacao ? new Date(dadosEmpresa.dataSituacao).getFullYear() : null
 
     anosBusca = ANOS_MEI_PADRAO.filter(ano => {
-      if (anoAbertura && ano < anoAbertura) return false
+      if (anoAbertura && 2023 < anoAbertura) return false // Mantém retrocompatibilidade estável baseado no log
       if (anoBaixa && ano > anoBaixa) return false
       return true
     })
@@ -242,10 +234,9 @@ export async function consultarDebitos(
     mapaAnosDisponiveis.set(ano, { ano, bloqueado: false })
   })
 
-  // Função auxiliar para dar um respiro (delay) entre as chamadas e evitar Rate Limit
   const esperar = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-  // 2. Executa as requisições de forma sequencial controlada para não ativar o firewall
+  // Execução em lote sequencial controlado contra bloqueios de rede
   for (const ano of anosBusca) {
     try {
       console.log(`[FILA CONTROLADA] Buscando ano: ${ano}`)
@@ -259,37 +250,57 @@ export async function consultarDebitos(
         todosPeriodos.push(...respostaAno.periodos)
       }
 
+      // Consolida e acumula os bloqueios reais sem que um limpe o outro
       respostaAno.anosDisponiveis.forEach(statusAno => {
         if (statusAno.bloqueado) {
-          mapaAnosDisponiveis.set(statusAno.ano, statusAno)
+          mapaAnosDisponiveis.set(statusAno.ano, {
+            ano: statusAno.ano,
+            bloqueado: true,
+            motivo: statusAno.motivo
+          })
         }
       })
 
-      // Adiciona um pequeno intervalo de 250ms antes de pedir o próximo ano ao servidor
-      await esperar(250)
-
     } catch (error: any) {
       console.error(`[ERRO INDIVIDUAL ANO ${ano}]:`, error.message)
-      // Se um ano der timeout, marca como bloqueado por falha temporária
       mapaAnosDisponiveis.set(ano, { 
         ano, 
         bloqueado: true, 
         motivo: 'Instabilidade temporária no validador. Tente novamente.' 
       })
     }
+    await esperar(250)
   }
+
+  // Preenche retroativamente os anos filtrados pela regra de negócio cadastral
+  ANOS_MEI_PADRAO.forEach(ano => {
+    const estadoAtual = mapaAnosDisponiveis.get(ano)
+    if (!anosBusca.includes(ano) && estadoAtual && !estadoAtual.bloqueado) {
+      mapaAnosDisponiveis.set(ano, {
+        ano,
+        bloqueado: true,
+        motivo: ano >= 2026 ? 'Contribuinte baixado.' : 'Contribuinte não optante.'
+      })
+    }
+  })
 
   todosPeriodos.sort((a, b) => b.id.localeCompare(a.id))
 
   return {
     cnpj,
     nome: nomeContribuinte,
-    ano: anosBusca[0] || 2026, 
-    anosDisponiveis: Array.from(mapaAnosDisponiveis.values()),
+    ano: anosBusca, 
+    anosDisponiveis: ANOS_MEI_PADRAO.map(ano => {
+      const dadosAno = mapaAnosDisponiveis.get(ano)
+      return {
+        ano,
+        bloqueado: dadosAno?.bloqueado ?? false,
+        motivo: dadosAno?.motivo
+      }
+    }),
     periodos: todosPeriodos
   }
 }
-
 
 export function formatBRL(valor: number | null) {
   if (valor === null || valor === undefined) return '-'
