@@ -30,7 +30,9 @@ export function EmitirGuia() {
   const [anoConsultado, setAnoConsultado] = useState<number | null>(null)
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
   const [beneficio, setBeneficio] = useState<Set<string>>(new Set())
-  const [dataPagamento, setDataPagamento] = useState('31/08/2026')
+  const [dataPagamento, setDataPagamento] = useState(() => {
+  return new Date().toLocaleDateString('pt-BR')
+})
   const [pagamento, setPagamento] = useState<PagamentoInfo | null>(null)
 
    const key = cnpj
