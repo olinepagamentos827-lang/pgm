@@ -23,7 +23,8 @@ const fetcher = async (url: string) => {
 }
 
 export function EmitirGuia() {
-  const { cnpj, nome } = useMei()
+  // Puxa as funções de atualização de estado do seu MeiContext
+  const { cnpj, nome, setAnosDisponiveis, setContribuinte } = useMei()
 
   const [anoSelect, setAnoSelect] = useState('')
   const [anoConsultado, setAnoConsultado] = useState<number | null>(null)
@@ -32,16 +33,27 @@ export function EmitirGuia() {
   const [dataPagamento, setDataPagamento] = useState('31/08/2026')
   const [pagamento, setPagamento] = useState<PagamentoInfo | null>(null)
 
- const key = cnpj
-  ? `/api/debitos?cnpj=${encodeURIComponent(cnpj.replace(/\D/g, ''))}`
-  : null
+  const key = cnpj
+    ? `/api/debitos?cnpj=${encodeURIComponent(cnpj.replace(/\D/g, ''))}`
+    : null
 
-
+  // CORREÇÃO: Alimenta o Context Provider assim que a rota responde 200 com sucesso
   const { data, isLoading } = useSWR(key, fetcher, {
     revalidateOnFocus: false,
-    revalidateOnMount: true, // Força a busca dos dados assim que a tela abre
+    revalidateOnMount: true,
+    onSuccess: (dadosRetornados) => {
+      if (dadosRetornados?.anosDisponiveis) {
+        // Popula os anos disponíveis dentro do Provider para o select conseguir enxergar!
+        setAnosDisponiveis(dadosRetornados.anosDisponiveis)
+      }
+      if (dadosRetornados?.nome && dadosRetornados.nome !== 'MICROEMPREENDEDOR INDIVIDUAL') {
+        // Atualiza a Razão Social corporativa na barra superior caso o Serpro/Snoop traga o nome real
+        setContribuinte({ nome: dadosRetornados.nome })
+      }
+    }
   })
 
+  // Lê os períodos direto da resposta da API ativa
   const periodos = useMemo(() => {
     if (!data?.periodos || !anoConsultado) return []
     return data.periodos.filter((p) => p.id.startsWith(`${anoConsultado}-`))
@@ -61,6 +73,7 @@ export function EmitirGuia() {
   function handleConsultar() {
     if (!anoSelect) return
     setAnoConsultado(Number(anoSelect))
+    setSelecionados(new Set()) // Limpa seleções residuais de cliques anteriores
   }
 
   function toggleSelecionado(id: string) {
@@ -114,6 +127,7 @@ export function EmitirGuia() {
       pixCode,
     })
   }
+
   return (
     <>
       {/* PAINEL EXTERNO */}
