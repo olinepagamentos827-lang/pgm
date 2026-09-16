@@ -11,11 +11,24 @@ import { PaymentModal, type PagamentoInfo } from '@/components/payment-modal'
 
 const ANOS = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
-const fetcher = (url: string) =>
-  fetch(url).then((r) => {
-    if (!r.ok) throw new Error('Falha na consulta')
-    return r.json() as Promise<ConsultaDebitosResponse>
-  })
+const fetcher = async (url: string) => {
+
+  const r = await fetch(url)
+
+  const texto = await r.text()
+
+  console.log(
+    '[DEBUG FRONT DEBITOS]',
+    texto
+  )
+
+  if(!r.ok){
+    throw new Error('Falha na consulta')
+  }
+
+  return JSON.parse(texto) as ConsultaDebitosResponse
+
+}
 
 export function EmitirGuia() {
   const { cnpj, nome } = useMei()
