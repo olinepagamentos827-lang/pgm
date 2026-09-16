@@ -86,34 +86,33 @@ async function consultarAno(
   }
 
   /* 
-    TRATAMENTO DE ERROS DO SERPRO INDIVIDUAL DO ANO
+    TRATAMENTO DE ERROS DO SERPRO
   */
   if (apiData['mensagem-erro'] || apiData.mensagemErro) {
     const erroObj = apiData['mensagem-erro'] || apiData.mensagemErro
     console.log('[DEBUG SERPRO MSG]', erroObj)
     const textoErro = erroObj.texto || ''
 
-    // SE PEDE DASN-SIMEI OU ANTERIOR, O MEI EXISTIA. DEVE FICAR CLICÁVEL (bloqueado: false)
+    // Se exige a DASN, a empresa existia no ano! DEVE FICAR SELECIONÁVEL E CLICÁVEL
     if (textoErro.includes('Antes de prosseguir') || textoErro.includes('DASN-Simei')) {
       return {
         cnpj,
-        nome: nomeFinal,
+        nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
         ano,
         anosDisponiveis: [
           {
             ano,
-            bloqueado: false,
-            motivo: undefined
+            bloqueado: false
           }
         ],
         periodos: []
       }
     }
 
-    // Se cair aqui, são os erros de fato que não pertencem ao tempo de vida (Não optante ou decadência)
+    // Se o erro indicar que a empresa não era optante real ou está baixada (como 2021, 2022 ou 2026)
     return {
       cnpj,
-      nome: nomeFinal,
+      nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
       ano,
       anosDisponiveis: [
         {
@@ -170,7 +169,7 @@ async function consultarAno(
 
     return {
       cnpj,
-      nome: nomeFinal,
+      nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
       ano,
       anosDisponiveis: [
         {
@@ -215,7 +214,7 @@ async function consultarAno(
 
   return {
     cnpj,
-    nome: nomeFinal,
+    nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
     ano,
     anosDisponiveis: [
       {
@@ -233,12 +232,9 @@ export async function consultarDebitos(
 ): Promise<ConsultaDebitosResponse> {
   let nomeContribuinte = nome || 'MICROEMPREENDEDOR INDIVIDUAL'
 
-  // Garante a busca cadastral da Snoop antes do loop para recuperar o nome real da empresa
   try {
     const dadosEmpresa = await consultarCnpj(cnpj)
-    if (dadosEmpresa.razaoSocial) {
-      nomeContribuinte = dadosEmpresa.razaoSocial
-    }
+    if (dadosEmpresa.razaoSocial) nomeContribuinte = dadosEmpresa.razaoSocial
   } catch (err) {
     console.log('[DEBUG NOME CATCH]', err)
   }
@@ -246,16 +242,14 @@ export async function consultarDebitos(
   const todosPeriodos: PeriodoApuracao[] = []
   const mapaAnosDisponiveis = new Map<number, AnoDisponivel>()
 
-  const escopoAnos = [2021, 2022, 2023, 2024, 2025, 2026]
+  const escopoAnos = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
-  // Seta o estado inicial estável para todos os anos do escopo
   escopoAnos.forEach(ano => {
     mapaAnosDisponiveis.set(ano, { ano, bloqueado: false })
   })
 
   const esperar = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-  // Varredura limpa termo a termo no Serpro
   for (const ano of escopoAnos) {
     try {
       console.log(`[FILA CONTROLADA] Buscando ano: ${ano}`)
@@ -269,7 +263,6 @@ export async function consultarDebitos(
         todosPeriodos.push(...respostaAno.periodos)
       }
 
-      // Copia a decisão individual gerada por cada ano consultado
       respostaAno.anosDisponiveis.forEach(statusAno => {
         mapaAnosDisponiveis.set(statusAno.ano, {
           ano: statusAno.ano,
@@ -289,13 +282,28 @@ export async function consultarDebitos(
     await esperar(250)
   }
 
+  // Sincroniza e garante o travamento estável dos anos não consultados ou com erro bruto
+  escopoAnos.forEach(ano => {
+    const dadosAno = mapaAnosDisponiveis.get(ano)
+    if (dadosAno && dadosAno.bloqueado && !dadosAno.motivo) {
+      mapaAnosDisponiveis.set(ano, {
+        ano,
+        bloqueado: true,
+        motivo: 'Não optante'
+      })
+    }
+  })
+
   todosPeriodos.sort((a, b) => b.id.localeCompare(a.id))
+
+  // Envia a lista ordenada de forma crescente para corresponder à sua foto (2021 a 2026)
+  const anosOrdenadosCrescente = [2021, 2022, 2023, 2024, 2025, 2026]
 
   return {
     cnpj,
     nome: nomeContribuinte,
-    ano: escopoAnos, 
-    anosDisponiveis: escopoAnos.map(ano => {
+    ano: anosOrdenadosCrescente, 
+    anosDisponiveis: anosOrdenadosCrescente.map(ano => {
       const dadosAno = mapaAnosDisponiveis.get(ano)
       return {
         ano,
