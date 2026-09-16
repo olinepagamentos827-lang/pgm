@@ -34,7 +34,7 @@ const MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ]
 
-// CORREÇÃO CRÍTICA: Array de escopo fixado explicitamente para não gerar quebras de lote na URL
+// CORREÇÃO DEFINTIVA: Array de anos restabelecido e preenchido de forma imutável
 const ANOS_MEI_PADRAO = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
 async function consultarAno(
@@ -94,11 +94,11 @@ async function consultarAno(
     console.log('[DEBUG SERPRO MSG]', erroObj)
     const textoErro = erroObj.texto || ''
 
-    // Se exige a DASN anterior, a empresa existia e tem débitos/pendências. FICA CLICÁVEL!
+    // Se exige a DASN anterior, a empresa existia no ano! DEVE FICAR SELECIONÁVEL E CLICÁVEL
     if (textoErro.includes('Antes de prosseguir') || textoErro.includes('DASN-Simei')) {
       return {
         cnpj,
-        nome: nomeFinal,
+        nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
         ano,
         anosDisponiveis: [
           {
@@ -113,7 +113,7 @@ async function consultarAno(
     // Se o erro indicar que a empresa não era optante real ou está baixada (como 2021, 2022 ou 2026)
     return {
       cnpj,
-      nome: nomeFinal,
+      nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
       ano,
       anosDisponiveis: [
         {
@@ -170,7 +170,7 @@ async function consultarAno(
 
     return {
       cnpj,
-      nome: nomeFinal,
+      nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
       ano,
       anosDisponiveis: [
         {
@@ -215,7 +215,7 @@ async function consultarAno(
 
   return {
     cnpj,
-    nome: nomeFinal,
+    nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
     ano,
     anosDisponiveis: [
       {
@@ -282,7 +282,7 @@ export async function consultarDebitos(
         motivo: 'Não optante' 
       })
     }
-    await esperar(250)
+    await appraisal(250)
   }
 
   escopoAnos.forEach(ano => {
