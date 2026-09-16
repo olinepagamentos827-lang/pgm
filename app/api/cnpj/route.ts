@@ -1,31 +1,30 @@
 import { NextResponse } from 'next/server'
 
 
-export async function GET(
-  request: Request
-) {
+export async function GET(request: Request) {
 
   try {
-
 
     const { searchParams } =
       new URL(request.url)
 
 
     const cnpj =
-      searchParams.get('cnpj')?.replace(/\D/g,'') || ''
+      searchParams
+        .get('cnpj')
+        ?.replace(/\D/g, '') || ''
 
 
 
-    if(!cnpj){
+    if (!cnpj) {
 
       return NextResponse.json(
         {
-          sucesso:false,
-          erro:'CNPJ não informado'
+          sucesso: false,
+          erro: 'CNPJ não informado'
         },
         {
-          status:400
+          status: 400
         }
       )
 
@@ -38,7 +37,11 @@ export async function GET(
 
 
 
-    if(!apiKey){
+    if (!apiKey) {
+
+      console.error(
+        '[CNPJ] API KEY ausente'
+      )
 
       return NextResponse.json(
         {
@@ -55,7 +58,7 @@ export async function GET(
 
 
     console.log(
-      '[API CNPJ] Consultando SNOOP:',
+      '[CNPJ] Consultando SNOOP:',
       cnpj
     )
 
@@ -65,7 +68,6 @@ export async function GET(
       await fetch(
         `https://snoopintelligence.cloud/api/v2/cnpj/${cnpj}`,
         {
-
           method:'GET',
 
           headers:{
@@ -74,7 +76,6 @@ export async function GET(
           },
 
           cache:'no-store'
-
         }
       )
 
@@ -95,19 +96,18 @@ export async function GET(
     let dados:any
 
 
-    try{
+    try {
 
       dados =
         JSON.parse(texto)
 
-    }
-    catch{
+    } catch {
 
       return NextResponse.json(
         {
           sucesso:false,
-          erro:'Snoop retornou resposta inválida',
-          resposta:texto.substring(0,200)
+          erro:'Snoop não retornou JSON',
+          retorno:texto.substring(0,200)
         },
         {
           status:502
@@ -118,12 +118,12 @@ export async function GET(
 
 
 
-    if(!resposta.ok){
+    if (!resposta.ok) {
 
       return NextResponse.json(
         {
           sucesso:false,
-          erro:'Erro na API Snoop',
+          erro:'Erro Snoop',
           detalhe:dados
         },
         {
@@ -161,13 +161,10 @@ export async function GET(
         '',
 
 
-      dados:empresa
-
     })
 
 
-  }
-  catch(error:any){
+  } catch(error:any) {
 
 
     console.error(
@@ -185,7 +182,6 @@ export async function GET(
         status:500
       }
     )
-
 
   }
 
