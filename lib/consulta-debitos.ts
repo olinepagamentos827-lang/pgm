@@ -88,26 +88,58 @@ async function consultarAno(
   /* 
     TRATAMENTO DE ERROS DO SERPRO INDIVIDUAL DO ANO
   */
-  if (apiData['mensagem-erro'] || apiData.mensagemErro) {
-    const erroObj = apiData['mensagem-erro'] || apiData.mensagemErro
-    console.log('[DEBUG SERPRO MSG]', erroObj)
-    
-    const textoErro = erroObj.texto || 'Erro interno do órgão validador.'
-    
+ if (apiData['mensagem-erro'] || apiData.mensagemErro) {
+
+  const erroObj =
+    apiData['mensagem-erro'] ||
+    apiData.mensagemErro
+
+  console.log('[DEBUG SERPRO MSG]', erroObj)
+
+  const textoErro =
+    erroObj.texto || ''
+
+
+  // NÃO É BLOQUEIO.
+  // SERPRO está pedindo declaração anterior.
+  if (
+    textoErro.includes('Antes de prosseguir') ||
+    textoErro.includes('DASN-Simei')
+  ) {
+
     return {
       cnpj,
       nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
       ano,
-      anosDisponiveis: [
+      anosDisponiveis:[
         {
           ano,
-          bloqueado: true,
-          motivo: textoErro
+          bloqueado:false
         }
       ],
-      periodos: []
+      periodos:[]
     }
+
   }
+
+
+  // Aqui sim é não optante real
+
+  return {
+    cnpj,
+    nome: nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
+    ano,
+    anosDisponiveis:[
+      {
+        ano,
+        bloqueado:true,
+        motivo:'Não optante'
+      }
+    ],
+    periodos:[]
+  }
+
+}
 
   /* PADRÃO NOVO SERPRO */
   const listaResumo = apiData['resumo-pa'] || apiData.resumoPa || []
@@ -256,8 +288,12 @@ export async function consultarDebitos(
   const mapaAnosDisponiveis = new Map<number, AnoDisponivel>()
 
   ANOS_MEI_PADRAO.forEach(ano => {
-    mapaAnosDisponiveis.set(ano, { ano, bloqueado: false })
+  mapaAnosDisponiveis.set(ano, {
+    ano,
+    bloqueado: true,
+    motivo: 'Não optante'
   })
+})
 
   const esperar = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
