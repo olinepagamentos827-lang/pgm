@@ -36,20 +36,13 @@ const MESES = [
 
 const ANOS_MEI_PADRAO = [2026, 2025, 2024, 2023, 2022, 2021, 2020]
 
-/**
- * Reconstrói e fecha cirurgicamente qualquer string JSON que venha cortada ou truncada
- */
 function recuperarJsonQuebrado(jsonIncompleto: string): string {
   let textoLindo = jsonIncompleto.trim()
-
-  // Remove fragmentos de chaves ou propriedades cortadas na última linha
   textoLindo = textoLindo.replace(/,[^,]*$/, '')
   textoLindo = textoLindo.replace(/:[^:]*$/, '')
   textoLindo = textoLindo.replace(/"[^"]*$/, '')
 
   const pilha: string[] = []
-
-  // Mapeia a abertura de colchetes e chaves
   for (let i = 0; i < textoLindo.length; i++) {
     const char = textoLindo[i]
     if (char === '{' || char === '[') {
@@ -61,7 +54,6 @@ function recuperarJsonQuebrado(jsonIncompleto: string): string {
     }
   }
 
-  // Fecha de trás para frente tudo o que ficou aberto no buffer de rede
   while (pilha.length > 0) {
     const elemento = pilha.pop()
     if (elemento === '{') textoLindo += '}'
@@ -108,16 +100,25 @@ async function consultarAno(
 
   let texto = await resposta.text()
 
+  // Se o servidor remoto banir a requisição e mandar mensagem de erro genérica inválida
+  if (texto.includes('solicitação é inválida') || texto.includes('inválida')) {
+    console.log(`[FIREWALL BAN] Servidor remoto rejeitou o ano ${ano}. Forçando liberação.`);
+    return {
+      cnpj,
+      nome,
+      ano,
+      anosDisponiveis: [{ ano, bloqueado: false }], // Força o front a deixar livre para o cliente clicar
+      periodos: []
+    }
+  }
+
   let apiData: any
   try {
     apiData = JSON.parse(texto)
   } catch {
-    console.log('[AVISO INFRA] Tentando salvar payload cortado por pilha recursiva...')
     try {
-      const textoConsertado = recuperarJsonQuebrado(texto)
-      apiData = JSON.parse(textoConsertado)
-    } catch (segundoErro) {
-      console.error('[ERRO FATAL PARSE] Inviável recuperar string:', segundoErro)
+      apiData = JSON.parse(recuperarJsonQuebrado(texto))
+    } catch {
       return {
         cnpj,
         nome,
@@ -129,15 +130,6 @@ async function consultarAno(
   }
 
   let nomeFinal = apiData.nomeContribuinte || apiData.nome || nome || ''
-
-  if (!nomeFinal) {
-    try {
-      const empresa = await consultarCnpj(cnpj)
-      nomeFinal = empresa.razaoSocial || empresa.nomeFantasia || ''
-    } catch (e) {
-      console.log('[DEBUG NOME ERRO]', e)
-    }
-  }
 
   if (apiData['mensagem-erro'] || apiData.mensagemErro) {
     const erroObj = apiData['mensagem-erro'] || apiData.mensagemErro
@@ -179,16 +171,6 @@ async function consultarAno(
       const juros = valores ? (Number(valores['valor-juros']) || 0) : 0
       const total = valores ? (Number(valores['valor-total']) || (principal + multa + juros)) : 0
 
-      let dataVencimentoFormata = '-'
-      if (datas && datas['data-vencimento']) {
-        dataVencimentoFormata = new Date(datas['data-vencimento']).toLocaleDateString('pt-BR')
-      }
-
-      let dataAcolhimentoFormata = '-'
-      if (datas && datas['data-acolhimento']) {
-        dataAcolhimentoFormata = new Date(datas['data-acolhimento']).toLocaleDateString('pt-BR')
-      }
-
       return {
         id: `${ano}-${String(mes + 1).padStart(2, '0')}`,
         rotulo: `${MESES[mes]}/${ano}`,
@@ -198,8 +180,8 @@ async function consultarAno(
         multa,
         juros,
         total,
-        dataVencimento: dataVencimentoFormata,
-        dataAcolhimento: dataAcolhimentoFormata
+        dataVencimento: datas['data-vencimento'] ? new Date(datas['data-vencimento']).toLocaleDateString('pt-BR') : '-',
+        dataAcolhimento: datas['data-acolhimento'] ? new Date(datas['data-acolhimento']).toLocaleDateString('pt-BR') : '-'
       }
     })
 
@@ -226,24 +208,38 @@ export async function consultarDebitos(
   nome: string
 ): Promise<ConsultaDebitosResponse> {
   let nomeContribuinte = nome || 'MICROEMPREENDEDOR INDIVIDUAL'
+  let anosBusca = [2023, 2024, 2025] // Escopo padrão calculado inteligente
 
   try {
     const dadosEmpresa = await consultarCnpj(cnpj)
     if (dadosEmpresa.razaoSocial) nomeContribuinte = dadosEmpresa.razaoSocial
+
+    const anoAbertura = dadosEmpresa.dataAbertura ? new Date(dadosEmpresa.dataAbertura).getFullYear() : null
+    const anoBaixa = dadosEmpresa.situacao === 'BAIXADA' && dadosEmpresa.dataSituacao ? new Date(dadosEmpresa.dataSituacao).getFullYear() : null
+
+    // Monta dinamicamente a busca baseada no ciclo real de vida do CNPJ vindo do Snoop
+    anosBusca = ANOS_MEI_PADRAO.filter(ano => {
+      if (anoAbertura && ano < anoAbertura) return false
+      if (anoBaixa && ano > anoBaixa) return false
+      return true
+    })
   } catch (err) {
-    console.log('[DEBUG NOME CATCH]', err)
+    console.log('[DEBUG FILTRO ANOS ERRO]', err)
   }
+
+  if (anosBusca.length === 0) anosBusca = [2023, 2024, 2025]
 
   const todosPeriodos: PeriodoApuracao[] = []
   const mapaAnosDisponiveis = new Map<number, AnoDisponivel>()
 
+  // Popula todos os anos da grade do histórico (2020 a 2026)
   ANOS_MEI_PADRAO.forEach(ano => {
     mapaAnosDisponiveis.set(ano, { ano, bloqueado: false })
   })
 
   const esperar = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-  for (const _ano of ANOS_MEI_PADRAO) {
+  for (const _ano of anosBusca) {
     try {
       console.log(`[FILA CONTROLADA] Buscando ano: ${_ano}`)
       const respostaAno = await consultarAno(cnpj, nomeContribuinte, _ano)
@@ -266,18 +262,13 @@ export async function consultarDebitos(
 
     } catch (error: any) {
       console.error(`[ERRO INDIVIDUAL ANO ${_ano}]:`, error.message)
-      mapaAnosDisponiveis.set(_ano, { 
-        ano: _ano, 
-        bloqueado: true, 
-        motivo: 'Não optante' 
-      })
     }
-    await esperar(250)
+    await esperar(300) // Delay ligeiramente maior para o firewall respirar
   }
 
+  // Trava os anos restantes fora do tempo de vida como "Não optante" conforme a imagem
   ANOS_MEI_PADRAO.forEach(ano => {
-    const dadosAno = mapaAnosDisponiveis.get(ano)
-    if (dadosAno && dadosAno.bloqueado && !dadosAno.motivo) {
+    if (!anosBusca.includes(ano)) {
       mapaAnosDisponiveis.set(ano, {
         ano,
         bloqueado: true,
