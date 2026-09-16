@@ -191,10 +191,17 @@ const listaResumo =
 
 
 
-        const mes =
-          Number(
-            pa.substring(4,6)
-          ) - 1
+       let mes =
+ Number(pa.substring(4,6)) - 1
+
+
+if(
+  isNaN(mes) ||
+  mes < 0 ||
+  mes > 11
+){
+  mes = 0
+}
 
 
 
@@ -453,7 +460,7 @@ export async function consultarDebitos(
       )
 
 
-
+    // encontrou no ano solicitado
     if(resultado.periodos.length > 0){
 
       return resultado
@@ -496,11 +503,24 @@ export async function consultarDebitos(
 
         console.log(
           '[DEBUG] Encontrado ano:',
-          anoAnterior
+          anoAnterior,
+          'quantidade:',
+          antigo.periodos.length
         )
 
 
-        return antigo
+        return {
+
+          ...antigo,
+
+          // mantém o ano real encontrado
+          ano: anoAnterior,
+
+          anosDisponiveis:
+            ANOS_MEI_PADRAO
+
+        }
+
 
       }
 
