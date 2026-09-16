@@ -13,13 +13,14 @@ export async function consultarCnpj(cnpj:string){
 
     const cnpjLimpo = cnpj.replace(/\D/g,'')
 
-   const baseUrl =
-  process.env.NEXT_PUBLIC_APP_URL ||
-  `https://${process.env.VERCEL_URL}`
+  const baseUrl =
+  process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : 'http://localhost:3000'
 
 
 const url =
-`${baseUrl}/SimplesNacional/Aplicacoes/ATSPO/pgmei.app/api/cnpj?cnpj=${cnpjLimpo}`
+`${baseUrl}/api/cnpj?cnpj=${cnpjLimpo}`
 
 
     console.log(
