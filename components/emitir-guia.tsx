@@ -26,7 +26,7 @@ export function EmitirGuia() {
   const { cnpj, nome } = useMei()
 
   const [anoSelect, setAnoSelect] = useState('')
-  const [anoConsultado, setAnoConsultado] = useState<number | null>(2026)
+  const [anoConsultado, setAnoConsultado] = useState<number | null>(null)
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
   const [beneficio, setBeneficio] = useState<Set<string>>(new Set())
   const [dataPagamento, setDataPagamento] = useState('31/08/2026')
@@ -40,7 +40,10 @@ export function EmitirGuia() {
     revalidateOnFocus: false,
   })
 
-  const periodos = data?.periodos ?? []
+    const periodos = useMemo(() => {
+    if (!data?.periodos || !anoConsultado) return []
+    return data.periodos.filter((p) => p.id.startsWith(`${anoConsultado}-`))
+  }, [data?.periodos, anoConsultado])
 
   const todosApuradosSelecionados = useMemo(() => {
     const apurados = periodos.filter((p) => p.apurado)
@@ -52,6 +55,7 @@ export function EmitirGuia() {
       .filter((p) => selecionados.has(p.id))
       .reduce((acc, p) => acc + (p.total ?? 0), 0)
   }, [periodos, selecionados])
+
 
   function handleConsultar() {
     if (!anoSelect) return
