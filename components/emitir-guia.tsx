@@ -164,33 +164,39 @@ export function EmitirGuia() {
           </label>
 
           <select
-            id="ano"
-            value={anoSelect}
-            onChange={(e) => setAnoSelect(e.target.value)}
-            className="
-              h-[28px]
-              w-[80px]
-              cursor-pointer
-              rounded-[4px]
-              border
-              border-[#c8c8c8]
-              bg-[linear-gradient(to_bottom,#ffffff_0%,#f1f1f1_55%,#dddddd_100%)]
-              px-2
-              py-0
-              text-[13px]
-              text-neutral-800
-              shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(0,0,0,0.12)]
-              outline-none
-            "
-          >
-            <option value="">&nbsp;</option>
-            {data?.anosDisponiveis?.map((item) => (
-              <option key={item.ano} value={item.ano} disabled={item.bloqueado}>
-                {item.ano}
-                {item.bloqueado ? ' Não optante' : ''}
-              </option>
-            ))}
-          </select>
+  id="ano"
+  value={anoSelect}
+  onChange={(e) => setAnoSelect(e.target.value)}
+  className="
+    h-[28px]
+    w-[160px] 
+    cursor-pointer
+    rounded-[4px]
+    border
+    border-[#c8c8c8]
+    bg-[linear-gradient(to_bottom,#ffffff_0%,#f1f1f1_55%,#dddddd_100%)]
+    px-1
+    py-0
+    text-[12px] 
+    text-neutral-800
+    shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(0,0,0,0.12)]
+    outline-none
+  "
+>
+  <option value="">&nbsp;</option>
+
+  {data?.anosDisponiveis?.map((item) => (
+    <option
+      key={item.ano}
+      value={item.ano}
+      disabled={item.bloqueado}
+    >
+      {item.ano}
+      {item.bloqueado ? ' Não optante' : ''}
+    </option>
+  ))}
+</select>
+
 
           <button
             type="button"
