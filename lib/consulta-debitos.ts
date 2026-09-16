@@ -307,7 +307,7 @@ export async function consultarDebitos(
   bloqueado: true,
   motivo: 'Não optante'
 })
-
+})
   todosPeriodos.sort((a, b) => b.id.localeCompare(a.id))
 
   return {
