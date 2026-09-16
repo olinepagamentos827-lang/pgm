@@ -1,40 +1,98 @@
-export interface ConsultaCnpjResponse {
-  sucesso: boolean
-  razaoSocial: string
-  nomeFantasia: string
-  cnpj: string
-  erro?: string
-}
+import { NextResponse } from 'next/server'
 
 
-export async function consultarCnpj(
-  cnpj:string
-):Promise<ConsultaCnpjResponse>{
+export async function GET(
+  request: Request
+) {
+
+  try {
 
 
-  try{
+    const { searchParams } =
+      new URL(request.url)
 
 
-    const cnpjLimpo =
-      cnpj.replace(/\D/g,'')
+    const cnpj =
+      searchParams.get('cnpj')?.replace(/\D/g,'') || ''
 
 
 
-    const response =
-      await fetch(
-        `${process.env.NEXT_PUBLIC_BASEPATH || ''}/api/cnpj?cnpj=${cnpjLimpo}`,
+    if(!cnpj){
+
+      return NextResponse.json(
         {
+          sucesso:false,
+          erro:'CNPJ não informado'
+        },
+        {
+          status:400
+        }
+      )
+
+    }
+
+
+
+    const apiKey =
+      process.env.CNPJ_API_KEY
+
+
+
+    if(!apiKey){
+
+      return NextResponse.json(
+        {
+          sucesso:false,
+          erro:'CNPJ_API_KEY não configurada'
+        },
+        {
+          status:500
+        }
+      )
+
+    }
+
+
+
+    console.log(
+      '[API CNPJ] Consultando SNOOP:',
+      cnpj
+    )
+
+
+
+    const resposta =
+      await fetch(
+        `https://snoopintelligence.cloud/api/v2/cnpj/${cnpj}`,
+        {
+
+          method:'GET',
+
+          headers:{
+            Authorization:`Bearer ${apiKey}`,
+            Accept:'application/json'
+          },
+
           cache:'no-store'
+
         }
       )
 
 
+
     const texto =
-      await response.text()
+      await resposta.text()
 
 
 
-    let dados:any = null
+    console.log(
+      '[SNOOP RAW]',
+      texto.substring(0,500)
+    )
+
+
+
+    let dados:any
 
 
     try{
@@ -45,25 +103,33 @@ export async function consultarCnpj(
     }
     catch{
 
-      console.error(
-        '[ERRO PARSE CNPJ]',
-        texto.substring(0,300)
+      return NextResponse.json(
+        {
+          sucesso:false,
+          erro:'Snoop retornou resposta inválida',
+          resposta:texto.substring(0,200)
+        },
+        {
+          status:502
+        }
       )
 
+    }
 
-      return {
 
-        sucesso:false,
 
-        razaoSocial:'',
+    if(!resposta.ok){
 
-        nomeFantasia:'',
-
-        cnpj:cnpjLimpo,
-
-        erro:'Resposta inválida da API CNPJ'
-
-      }
+      return NextResponse.json(
+        {
+          sucesso:false,
+          erro:'Erro na API Snoop',
+          detalhe:dados
+        },
+        {
+          status:resposta.status
+        }
+      )
 
     }
 
@@ -74,15 +140,13 @@ export async function consultarCnpj(
 
 
 
-    return {
-
+    return NextResponse.json({
 
       sucesso:true,
 
-
       cnpj:
         empresa.cnpj ||
-        cnpjLimpo,
+        cnpj,
 
 
       razaoSocial:
@@ -97,8 +161,9 @@ export async function consultarCnpj(
         '',
 
 
-    }
+      dados:empresa
 
+    })
 
 
   }
@@ -106,27 +171,22 @@ export async function consultarCnpj(
 
 
     console.error(
-      '[ERRO CONSULTA CNPJ]',
+      '[ERRO API CNPJ]',
       error
     )
 
 
-    return {
-
-      sucesso:false,
-
-      razaoSocial:'',
-
-      nomeFantasia:'',
-
-      cnpj,
-
-      erro:error.message
-
-    }
+    return NextResponse.json(
+      {
+        sucesso:false,
+        erro:error.message
+      },
+      {
+        status:500
+      }
+    )
 
 
   }
-
 
 }
