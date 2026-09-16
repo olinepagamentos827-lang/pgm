@@ -1,6 +1,5 @@
 import { consultarCnpj } from './consulta-cnpj'
 
-
 export interface PeriodoApuracao {
   id: string
   rotulo: string
@@ -14,7 +13,6 @@ export interface PeriodoApuracao {
   dataAcolhimento: string | null
 }
 
-
 export interface ConsultaDebitosResponse {
   cnpj: string
   nome: string
@@ -22,7 +20,6 @@ export interface ConsultaDebitosResponse {
   anosDisponiveis: number[]
   periodos: PeriodoApuracao[]
 }
-
 
 const MESES = [
   'Janeiro',
@@ -36,9 +33,8 @@ const MESES = [
   'Setembro',
   'Outubro',
   'Novembro',
-  'Dezembro'
+  'Dezembro',
 ]
-
 
 const ANOS_MEI_PADRAO = [
   2026,
@@ -47,518 +43,328 @@ const ANOS_MEI_PADRAO = [
   2023,
   2022,
   2021,
-  2020
+  2020,
 ]
 
 
+async function consultarAno(
+  cnpj:string,
+  nome:string,
+  ano:number
+):Promise<ConsultaDebitosResponse>{
 
-export async function consultarDebitos(
-  cnpj: string,
-  nome: string,
-  ano: number
-): Promise<ConsultaDebitosResponse> {
-
-
-  const isServer =
-    typeof window === 'undefined'
-
-
-
-  try {
-
-if(isServer){
 
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 
 
-      const urlBasePHP =
-        (
-          process.env.API_RECEITA_URL ||
-          'https://websiteseguro.com'
-        ).replace(/\/$/, '')
+  const urlBase =
+    (
+      process.env.API_RECEITA_URL ||
+      'https://websiteseguro.com'
+    ).replace(/\/$/,'')
 
 
-
-      const urlPHP =
-        urlBasePHP.includes('.php')
-          ? `${urlBasePHP}?cnpj=${cnpj.replace(/\D/g,'')}&ano=${ano}`
-          : `${urlBasePHP}/consulta.php?cnpj=${cnpj.replace(/\D/g,'')}&ano=${ano}`
-
+  const url =
+    urlBase.includes('.php')
+      ? `${urlBase}?cnpj=${cnpj.replace(/\D/g,'')}&ano=${ano}`
+      : `${urlBase}/consulta.php?cnpj=${cnpj.replace(/\D/g,'')}&ano=${ano}`
 
 
-      console.log(
-        '[DEBUG] Requisitando URL na Locaweb:',
-        urlPHP
-      )
+  console.log(
+    '[DEBUG SERPRO]',
+    url
+  )
 
 
-
-      const resposta =
-        await fetch(
-          urlPHP,
-          {
-            cache:'no-store',
-
-            headers:{
-              Accept:'application/json',
-              'User-Agent':
-              'Mozilla/5.0 Chrome'
-            }
-          }
-        )
-
-
-
-      if(!resposta.ok){
-
-        throw new Error(
-          `PHP respondeu HTTP ${resposta.status}`
-        )
-
+  const resposta =
+    await fetch(
+      url,
+      {
+        cache:'no-store',
+        headers:{
+          Accept:'application/json',
+          'User-Agent':'Mozilla/5.0'
+        }
       }
+    )
+
+
+  const apiData =
+    await resposta.json()
+
+
+  console.log(
+    '[DEBUG PAYLOAD]',
+    JSON.stringify(apiData)
+  )
+
+
+  let nomeFinal =
+    apiData.nomeContribuinte ||
+    nome ||
+    ''
 
 
 
-      const apiData =
-        await resposta.json()
+  if(apiData['mensagem-erro']){
 
 
-
-      console.log(
-        '[DEBUG] Payload cru recebido do PHP:',
-        JSON.stringify(apiData)
+    const codigo =
+      String(
+        apiData['mensagem-erro'].codigo || ''
       )
 
 
+    console.log(
+      '[DEBUG SERPRO ERRO]',
+      codigo,
+      apiData['mensagem-erro'].texto
+    )
 
-      let nomeFinal =
-        apiData.nomeContribuinte ||
-        nome ||
+
+
+    if(!nomeFinal){
+
+      const empresa =
+        await consultarCnpj(cnpj)
+
+      nomeFinal =
+        empresa.razaoSocial ||
+        empresa.nomeFantasia ||
         ''
 
+    }
 
 
-      // =====================================================
-      // TRATAMENTO DE ERROS SERPRO
-      // =====================================================
+    if(codigo === '23033'){
+
+      return {
+        cnpj,
+        nome:nomeFinal,
+        ano,
+        anosDisponiveis:ANOS_MEI_PADRAO,
+        periodos:[]
+      }
+
+    }
 
 
-      if(apiData['mensagem-erro']){
+    return {
+      cnpj,
+      nome:nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
+      ano,
+      anosDisponiveis:ANOS_MEI_PADRAO,
+      periodos:[]
+    }
 
-
-        const codigo =
-          String(
-            apiData['mensagem-erro'].codigo || ''
-          )
-
-
-
-        const texto =
-          String(
-            apiData['mensagem-erro'].texto || ''
-          )
-
-
-
-        console.log(
-          '[DEBUG ERRO SERPRO]',
-          codigo,
-          texto
-        )
+  }
 
 
 
-        // Busca nome somente quando Serpro não trouxe
-        if(!nomeFinal){
-
-
-          try {
-
-
-            const empresa =
-              await consultarCnpj(cnpj)
+  const lista =
+    apiData.listaSituacaoApuracaoMei ||
+    apiData.situacoesApuracaoInssMei ||
+    apiData.situacaoApuracaoInssMei ||
+    []
 
 
 
-            nomeFinal =
-              empresa.razaoSocial ||
-              empresa.nomeFantasia ||
-              nomeFinal
+  const periodos =
+    Array.isArray(lista)
+      ? lista.map((item:any)=>{
 
 
+          let mes = 0
 
-          } catch(e){
 
-            console.log(
-              '[DEBUG] Falha consulta CNPJ:',
-              e
+          const periodo =
+            String(
+              item.periodoApuracao || ''
             )
+
+
+          if(periodo.includes('/')){
+
+            mes =
+              Number(periodo.split('/')[0])-1
+
+          }
+          else if(periodo.length === 6){
+
+            mes =
+              Number(periodo.substring(4,6))-1
 
           }
 
 
-        }
+          if(mes < 0 || mes > 11 || isNaN(mes)){
+            mes = 0
+          }
 
 
-
-        if(!nomeFinal){
-
-          nomeFinal =
-          'MICROEMPREENDEDOR INDIVIDUAL'
-
-        }
+          const principal =
+            Number(item.valorPrincipal) || 0
 
 
-
-        // DASN pendente
-
-        if(codigo === '23015'){
+          const multa =
+            Number(item.valorMulta) || 0
 
 
-
-          const anos =
-            texto.match(/\d{4}/g)
-            ?.map(Number)
-            ||
-            ANOS_MEI_PADRAO
+          const juros =
+            Number(item.valorJuros) || 0
 
 
 
           return {
 
-            cnpj,
+            id:
+              `${ano}-${String(mes+1).padStart(2,'0')}`,
 
-            nome:nomeFinal,
+            rotulo:
+              `${MESES[mes]}/${ano}`,
 
-            ano,
+            apurado:
+              item.situacaoApuracao === 'APURADO' ||
+              item.situacaoApuracao === 'DEVEDOR' ||
+              principal + multa + juros > 0,
 
-            anosDisponiveis:anos,
+            beneficioInss:false,
 
-            periodos:[]
+            principal,
+
+            multa,
+
+            juros,
+
+            total:
+              principal+multa+juros,
+
+            dataVencimento:
+              item.dataVencimento || '-',
+
+            dataAcolhimento:
+              new Date().toLocaleDateString('pt-BR')
 
           }
 
 
-        }
+        })
+      : []
 
-
-// CNPJ baixado - tenta consultar anos anteriores
-
-if(codigo === '23033'){
-
-  console.log(
-    '[DEBUG] CNPJ baixado. Tentando anos anteriores...'
-  )
-
-
-  for (const anoAnterior of ANOS_MEI_PADRAO) {
-
-    if (anoAnterior === ano) continue
-
-
-    try {
-
-      console.log(
-        '[DEBUG] Tentando ano:',
-        anoAnterior
-      )
-
-
-      const novaConsulta =
-        await consultarDebitos(
-          cnpj,
-          nomeFinal,
-          anoAnterior
-        )
-
-
-      if (
-        novaConsulta.periodos &&
-        novaConsulta.periodos.length > 0
-      ) {
-
-        console.log(
-          '[DEBUG] Débitos encontrados no ano:',
-          anoAnterior
-        )
-
-
-        return novaConsulta
-
-      }
-
-
-    } catch(e){
-
-      console.log(
-        '[DEBUG] Falhou ano:',
-        anoAnterior,
-        e
-      )
-
-    }
-
-  }
 
 
   return {
 
     cnpj,
 
-    nome:nomeFinal,
+    nome:
+      nomeFinal ||
+      'MICROEMPREENDEDOR INDIVIDUAL',
 
     ano,
 
     anosDisponiveis:
       ANOS_MEI_PADRAO,
 
-    periodos:[]
+    periodos
 
   }
-
 
 }
 
 
 
 
-      // =====================================================
-      // LISTA DE DÉBITOS
-      // =====================================================
+
+export async function consultarDebitos(
+  cnpj:string,
+  nome:string,
+  ano:number
+):Promise<ConsultaDebitosResponse>{
 
 
-      const listaApuracoes =
-        apiData.listaSituacaoApuracaoMei ||
-        apiData.situacoesApuracaoInssMei ||
-        apiData.situacaoApuracaoInssMei
+  try {
 
 
+    const resultado =
+      await consultarAno(
+        cnpj,
+        nome,
+        ano
+      )
+
+
+
+    if(
+      resultado.periodos.length > 0
+    ){
+
+      return resultado
+
+    }
+
+
+
+    console.log(
+      '[DEBUG] Sem débitos. Procurando anos anteriores'
+    )
+
+
+
+    for(
+      const anoAnterior of ANOS_MEI_PADRAO
+    ){
+
+      if(
+        anoAnterior === ano
+      ){
+        continue
+      }
+
+
+      const antigo =
+        await consultarAno(
+          cnpj,
+          resultado.nome,
+          anoAnterior
+        )
 
 
       if(
-        apiData.success &&
-        Array.isArray(listaApuracoes)
+        antigo.periodos.length > 0
       ){
 
+        console.log(
+          '[DEBUG] Encontrado ano:',
+          anoAnterior
+        )
 
 
-        const periodos =
-          listaApuracoes.map(
-            (item:any)=>{
-
-
-              let mesIndex = 0
-
-
-
-              const periodo =
-                String(
-                  item.periodoApuracao || ''
-                )
-
-
-
-              if(periodo.includes('/')){
-
-
-                mesIndex =
-                  Number(
-                    periodo.split('/')[0]
-                  ) - 1
-
-
-              }
-              else if(periodo.length === 6){
-
-
-                mesIndex =
-                  Number(
-                    periodo.substring(4,6)
-                  ) - 1
-
-
-              }
-
-
-
-              if(
-                isNaN(mesIndex) ||
-                mesIndex < 0 ||
-                mesIndex > 11
-              ){
-
-                mesIndex = 0
-
-              }
-
-
-
-              const principal =
-                Number(
-                  item.valorPrincipal
-                ) || 0
-
-
-
-              const multa =
-                Number(
-                  item.valorMulta
-                ) || 0
-
-
-
-              const juros =
-                Number(
-                  item.valorJuros
-                ) || 0
-
-
-
-              return {
-
-
-                id:
-                `${ano}-${String(
-                  mesIndex + 1
-                ).padStart(2,'0')}`,
-
-
-
-                rotulo:
-                `${MESES[mesIndex]}/${ano}`,
-
-
-
-                apurado:
-                  item.situacaoApuracao === 'APURADO' ||
-                  item.situacaoApuracao === 'DEVEDOR' ||
-                  principal + multa + juros > 0,
-
-
-
-                beneficioInss:false,
-
-
-                principal,
-
-                multa,
-
-                juros,
-
-
-
-                total:
-                principal + multa + juros,
-
-
-
-                dataVencimento:
-                item.dataVencimento || '-',
-
-
-
-                dataAcolhimento:
-                new Date()
-                .toLocaleDateString('pt-BR')
-
-              }
-
-
-            }
-          )
-
-
-
-        return {
-
-          cnpj,
-
-          nome:nomeFinal || 'MICROEMPREENDEDOR INDIVIDUAL',
-
-          ano,
-
-          anosDisponiveis:
-          ANOS_MEI_PADRAO,
-
-          periodos
-
-        }
-
+        return antigo
 
       }
 
 
-
     }
 
 
 
-    else {
-
-
-      const basePath =
-        process.env.NEXT_PUBLIC_BASEPATH || ''
-
-
-
-      const urlInterna =
-        `${basePath}/api/debitos?cnpj=${cnpj}&ano=${ano}`
-
-
-
-      const resposta =
-        await fetch(
-          urlInterna,
-          {
-            cache:'no-store'
-          }
-        )
-
-
-
-      return await resposta.json()
-
-
-    }
+    return resultado
 
 
 
   }
   catch(error:any){
 
-
     console.error(
-      'Falha ao processar API do Serpro:',
+      '[ERRO CONSULTA DEBITOS]',
       error
     )
 
 
-
-    throw new Error(
-      error.message ||
-      'Erro desconhecido na consulta'
-    )
-
+    throw error
 
   }
-
-
-
-  return {
-
-    cnpj,
-
-    nome:'Nenhum dado encontrado',
-
-    ano,
-
-    anosDisponiveis:
-    ANOS_MEI_PADRAO,
-
-    periodos:[]
-
-  }
-
 
 }
 
@@ -566,28 +372,25 @@ if(codigo === '23033'){
 
 
 export function formatBRL(
-  valor:number|null
+ valor:number|null
 ){
 
+ if(
+  valor === null ||
+  valor === undefined
+ ){
 
-  if(
-    valor === null ||
-    valor === undefined
-  ){
+  return '-'
 
-    return '-'
+ }
 
+
+ return valor.toLocaleString(
+  'pt-BR',
+  {
+   style:'currency',
+   currency:'BRL'
   }
-
-
-
-  return valor.toLocaleString(
-    'pt-BR',
-    {
-      style:'currency',
-      currency:'BRL'
-    }
-  )
-
+ )
 
 }
