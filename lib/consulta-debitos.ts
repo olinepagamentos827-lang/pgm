@@ -233,10 +233,19 @@ export async function consultarDebitos(
     anoBaixa = anoBaixaCalc !== null && !Number.isNaN(anoBaixaCalc) ? anoBaixaCalc : null
 
     anosBusca = ANOS_MEI_PADRAO.filter(ano => {
-      if (anoAbertura && ano < anoAbertura) return false
-      if (anoBaixa && ano > anoBaixa) return false
-      return true
-    })
+
+  // antes da abertura não consulta
+  if (anoAbertura && ano < anoAbertura) {
+    return false
+  }
+
+  // depois da baixa não consulta
+  if (anoBaixa && ano > anoBaixa) {
+    return false
+  }
+
+  return true
+})
   } catch (err) {
     console.log('[DEBUG FILTRO ANOS ERRO]', err)
   }
@@ -287,22 +296,17 @@ export async function consultarDebitos(
     await esperar(250)
   }
 
-  // Preenche retroativamente os anos removidos pelo filtro cadastral
-  // (antes da abertura ou após a baixa), usando anoAbertura/anoBaixa reais.
   ANOS_MEI_PADRAO.forEach(ano => {
-    const estadoAtual = mapaAnosDisponiveis.get(ano)
-    if (!anosBusca.includes(ano) && estadoAtual && !estadoAtual.bloqueado) {
-      const motivo = anoBaixa !== null && ano > anoBaixa
-        ? 'Contribuinte baixado.'
-        : 'Contribuinte não optante.'
 
-      mapaAnosDisponiveis.set(ano, {
-        ano,
-        bloqueado: true,
-        motivo
-      })
-    }
-  })
+  if (anosBusca.includes(ano)) {
+    return
+  }
+
+  mapaAnosDisponiveis.set(ano, {
+  ano,
+  bloqueado: true,
+  motivo: 'Não optante'
+})
 
   todosPeriodos.sort((a, b) => b.id.localeCompare(a.id))
 
